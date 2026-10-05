@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 import { fetchMenu } from '@/api/public';
 import { ErrorCode } from '@/types/error-codes';
+import { useAppStore } from '@/store/app';
 import { useCartStore } from '@/store/cart';
 import type { MenuCategory, MenuDish, PublicStore } from '@/types/api';
 
@@ -51,6 +52,8 @@ export const useMenuStore = defineStore('menu', () => {
       store.value = menu.store;
       categories.value = menu.categories;
       errorCode.value = 0;
+      // 店名与营业状态在确认页、收银台都要用，统一挂在 app store 上
+      useAppStore().store = menu.store;
       return true;
     } catch (cause) {
       const code = (cause as { code?: number }).code ?? 0;
