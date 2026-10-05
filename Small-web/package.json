@@ -1,0 +1,18 @@
+{
+  "name": "ordering-small-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Ordering 多商户 SaaS 点餐系统 —— 顾客端小程序（uni-app + HBuilderX）",
+  "scripts": {
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "pinia": "^2.3.1"
+  },
+  "devDependencies": {
+    "@dcloudio/types": "^3.4.22",
+    "typescript": "^5.9.3",
+    "vue": "^3.4.21",
+    "vue-tsc": "^2.2.10"
+  }
+}
