@@ -54,5 +54,10 @@ desktop.ini
 coverage/
 *.local
 
-# ---------- AI 工作数据（本地记忆/缓存，不入库）----------
+# ---------- AI 工作数据 / 项目规则（本地保留，不入库）----------
 .workbuddy-ai/
+.codebuddy/
+CODEBUDDY.md
+AGENTS.md
+.cursorrules
+.windsurfrules
