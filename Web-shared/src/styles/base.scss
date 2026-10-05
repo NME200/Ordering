@@ -1,0 +1,333 @@
+/* ============================================================
+ * 基础样式：重置、排版、滚动条、可访问性、通用工具类
+ * ============================================================ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  background-color: var(--bg-app);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p,
+figure {
+  margin: 0;
+}
+
+ul,
+ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+a {
+  color: var(--brand-600);
+  text-decoration: none;
+  transition: color var(--duration-fast) var(--ease-out-quart);
+
+  &:hover {
+    color: var(--brand-500);
+  }
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+/* ---------- 可访问性：始终提供可见焦点环 ---------- */
+:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: 2px;
+}
+
+/* ---------- 滚动条：细、暖调、不抢视线 ---------- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--neutral-300) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--neutral-300);
+  border-radius: var(--radius-full);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--neutral-400);
+  background-clip: content-box;
+}
+
+/* 深色区域内的滚动条 */
+.is-dark-scroll::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.16);
+  background-clip: content-box;
+}
+
+::selection {
+  background-color: var(--brand-200);
+  color: var(--brand-900);
+}
+
+/* ============================================================
+ * 通用工具类
+ * ============================================================ */
+
+/* 页面外壳：统一内容区留白与最大宽度 */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+/* 面板：后台的主要容器，替代「卡片套卡片」 */
+.panel {
+  background-color: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+}
+
+.panel--flush {
+  overflow: hidden;
+}
+
+/* 数字：等宽数字，保证表格与统计对齐 */
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* 次要说明文本 */
+.muted {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+/* 表格中的主副两行信息 */
+.cell-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cell-stack__main {
+  color: var(--text-primary);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cell-stack__sub {
+  color: var(--text-placeholder);
+  font-size: 12px;
+}
+
+/* 空值占位，避免表格里出现空白单元格 */
+.empty-cell {
+  color: var(--neutral-300);
+}
+
+/* 单元格内的次要说明（如「本店已停售」「标准 ¥xx」） */
+.cell-note {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-placeholder);
+}
+
+/* ============================================================
+ * 列表页通用结构（六个业务模块共用，避免每页各写一套）
+ * ============================================================ */
+
+/* 筛选栏：条件在左，动作在右 */
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--neutral-100);
+}
+
+/* 把右侧动作推到末尾 */
+.filters__spacer {
+  margin-left: auto;
+}
+
+/* 筛选控件宽度。
+   选择器必须带 `.filters` 前缀：Element Plus 的 el-input / el-select 默认 `width: 100%`，
+   而按需引入的组件样式在 dev 下晚于本文件注入，同优先级的 `.filters__field` 会被反超，
+   表现为搜索框撑满整行。日期区间选择器是两层类，所以再补一个自身类名压住它。 */
+.filters .filters__field {
+  flex: 0 0 auto;
+  width: 240px;
+}
+
+.filters .filters__field.el-select {
+  width: 168px;
+}
+
+.filters .filters__field--wide,
+.filters .filters__field--wide.el-date-editor {
+  width: 400px;
+}
+
+/* 表格操作列：链接按钮紧凑排列 */
+.table-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* 内嵌列表：作为「商户详情」标签页内容时不自带面板边框，由父级面板统一承载 */
+.embedded-list {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* 封禁 / 停用发起方标签（账号与门店共用）：紧贴开关右侧 */
+.ban-tag {
+  margin-left: 8px;
+}
+
+/* 内嵌列表的操作入口条：内嵌形态没有页头，新增按钮需要一个独立落点 */
+.embedded-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5) 0;
+}
+
+/* 表格中的商品缩略图 */
+.cell-thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  border: 1px solid var(--border-color);
+  background-color: var(--neutral-50);
+}
+
+.cell-thumb--placeholder {
+  display: grid;
+  place-items: center;
+  color: var(--neutral-300);
+  font-size: 16px;
+}
+
+/* 表单里成对出现的字段（如价格区间） */
+.form-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* 弹窗内表单的底部说明 */
+.form-hint {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-placeholder);
+}
+
+/* 页面切换过渡 */.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: opacity var(--duration-base) var(--ease-out-quart),
+    transform var(--duration-base) var(--ease-out-quart);
+}
+
+.fade-slide-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+/* 内容入场：仅用于首屏关键区域 */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.rise-in {
+  animation: rise-in var(--duration-slow) var(--ease-out-expo) both;
+}
+
+/* 骨架微光（加载态） */
+@keyframes shimmer {
+  0% {
+    background-position: -420px 0;
+  }
+  100% {
+    background-position: 420px 0;
+  }
+}
+
+.skeleton-line {
+  height: 12px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(
+    90deg,
+    var(--neutral-100) 25%,
+    var(--neutral-50) 37%,
+    var(--neutral-100) 63%
+  );
+  background-size: 840px 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise-in,
+  .skeleton-line {
+    animation: none;
+  }
+}

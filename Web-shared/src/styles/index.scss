@@ -1,0 +1,4 @@
+/* 样式入口：顺序不可调换 —— 令牌 → Element Plus 覆盖 → 基础样式 */
+@use './tokens.scss';
+@use './element.scss';
+@use './base.scss';

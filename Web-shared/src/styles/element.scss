@@ -1,0 +1,160 @@
+/* ============================================================
+ * Element Plus 主题覆盖
+ * ------------------------------------------------------------
+ * 只覆盖官方暴露的 CSS 变量，不写选择器级别的暴力覆盖，
+ * 这样 Element Plus 升级后依然稳定（见 CODEBUDDY.md 6.6）。
+ * ============================================================ */
+
+:root {
+  /* ---------- 主色 ---------- */
+  --el-color-primary: var(--brand-500);
+  --el-color-primary-light-3: #d49077;
+  --el-color-primary-light-5: #e1b09e;
+  --el-color-primary-light-7: #edcfc5;
+  --el-color-primary-light-8: #f3dfd8;
+  --el-color-primary-light-9: var(--brand-100);
+  --el-color-primary-dark-2: var(--brand-600);
+
+  /* ---------- 功能色 ---------- */
+  --el-color-success: var(--success-500);
+  --el-color-success-light-9: var(--success-100);
+  --el-color-warning: var(--warning-500);
+  --el-color-warning-light-9: var(--warning-100);
+  --el-color-danger: var(--danger-500);
+  --el-color-danger-light-9: var(--danger-100);
+  --el-color-error: var(--danger-500);
+  --el-color-error-light-9: var(--danger-100);
+  --el-color-info: var(--info-500);
+  --el-color-info-light-9: var(--neutral-100);
+
+  /* ---------- 文本 ---------- */
+  --el-text-color-primary: var(--text-primary);
+  --el-text-color-regular: var(--text-regular);
+  --el-text-color-secondary: var(--text-secondary);
+  --el-text-color-placeholder: var(--text-placeholder);
+  --el-text-color-disabled: var(--neutral-400);
+
+  /* ---------- 边框 ---------- */
+  --el-border-color: var(--border-color);
+  --el-border-color-light: var(--neutral-100);
+  --el-border-color-lighter: var(--neutral-100);
+  --el-border-color-extra-light: var(--neutral-50);
+  --el-border-color-hover: var(--neutral-300);
+  --el-border-color-darker: var(--neutral-300);
+
+  /* ---------- 填充 ---------- */
+  --el-fill-color: var(--neutral-100);
+  --el-fill-color-light: var(--neutral-50);
+  --el-fill-color-lighter: var(--neutral-25);
+  --el-fill-color-blank: var(--surface);
+  --el-bg-color: var(--surface);
+  --el-bg-color-page: var(--bg-app);
+  --el-bg-color-overlay: var(--surface);
+
+  /* ---------- 圆角 ---------- */
+  --el-border-radius-base: var(--radius-md);
+  --el-border-radius-small: var(--radius-sm);
+  --el-border-radius-round: var(--radius-full);
+
+  /* ---------- 字体 ---------- */
+  --el-font-family: var(--font-sans);
+  --el-font-size-base: 14px;
+  --el-font-size-small: 13px;
+  --el-font-size-extra-small: 12px;
+
+  /* ---------- 阴影 ---------- */
+  --el-box-shadow-light: var(--shadow-sm);
+  --el-box-shadow: var(--shadow-md);
+  --el-box-shadow-dark: var(--shadow-lg);
+  --el-box-shadow-lighter: var(--shadow-xs);
+
+  /* ---------- 动效 ---------- */
+  --el-transition-duration: var(--duration-base);
+  --el-transition-duration-fast: var(--duration-fast);
+}
+
+/* 表格：更轻的分隔线、更克制的表头，避免默认灰底的沉重感 */
+.el-table {
+  --el-table-border-color: var(--neutral-100);
+  --el-table-header-bg-color: var(--neutral-50);
+  --el-table-header-text-color: var(--text-secondary);
+  --el-table-row-hover-bg-color: var(--brand-50);
+  --el-table-text-color: var(--text-regular);
+
+  th.el-table__cell {
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: 0.02em;
+  }
+}
+
+/* 按钮：字重与圆角统一，主按钮加一点品牌光晕 */
+.el-button {
+  font-weight: 500;
+}
+
+.el-button--primary {
+  box-shadow: var(--shadow-brand);
+
+  &:hover,
+  &:focus-visible {
+    box-shadow: 0 8px 22px -8px rgba(194, 96, 60, 0.55);
+  }
+}
+
+.el-button.is-text,
+.el-button.is-link {
+  box-shadow: none;
+}
+
+/* 表单：横向表单下标签不应折行（Element Plus 默认未声明 nowrap） */
+.el-form-item__label {
+  white-space: nowrap;
+}
+
+/* 输入框：聚焦时用品牌色描边 + 柔和外环 */
+.el-input__wrapper.is-focus,
+.el-textarea__inner:focus {
+  box-shadow: 0 0 0 1px var(--brand-500) inset, 0 0 0 3px rgba(194, 96, 60, 0.12);
+}
+
+/* 弹窗：更大的圆角与更通透的遮罩 */
+.el-dialog {
+  --el-dialog-border-radius: var(--radius-lg);
+
+  box-shadow: var(--shadow-lg);
+}
+
+.el-overlay {
+  background-color: rgba(36, 31, 28, 0.42);
+  backdrop-filter: blur(2px);
+}
+
+/* 抽屉 / 卡片 / 标签 */
+.el-drawer {
+  --el-drawer-padding-primary: var(--space-6);
+}
+
+.el-card {
+  --el-card-border-radius: var(--radius-lg);
+  --el-card-border-color: var(--border-color);
+}
+
+.el-tag {
+  --el-tag-border-radius: var(--radius-sm);
+
+  font-weight: 500;
+}
+
+.el-message {
+  --el-message-border-radius: var(--radius-md);
+}
+
+.el-pagination {
+  --el-pagination-font-size: 13px;
+}
+
+/* 菜单在深色侧边栏中的样式（局部变量覆写，不改全局） */
+.el-menu {
+  border-right: none;
+}

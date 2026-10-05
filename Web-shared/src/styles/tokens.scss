@@ -1,0 +1,115 @@
+/* ============================================================
+ * 设计令牌（Design Tokens）
+ * ------------------------------------------------------------
+ * 风格定位：现代精致 —— 面向平台运营 / 商户管理员的桌面端后台。
+ * 主色取「赤陶橙」：贴合餐饮业态的食欲语义，同时避开泛 AI 的
+ * 紫蓝渐变与霓虹青；中性色统一带暖调，与主色同源，避免冷灰的廉价感。
+ * 所有组件样式只允许引用这里的变量，不得散落魔法色值。
+ * ============================================================ */
+
+:root {
+  /* ---------- 品牌主色阶（赤陶橙） ---------- */
+  --brand-50: #fdf6f3;
+  --brand-100: #f9efec;
+  --brand-200: #f3dfd8;
+  --brand-300: #edcfc5;
+  --brand-400: #d4825f;
+  --brand-500: #c2603c;
+  --brand-600: #a94f2f;
+  --brand-700: #8d4026;
+  --brand-800: #713420;
+  --brand-900: #5c2b1b;
+
+  /* ---------- 功能色（降饱和，避免刺眼） ---------- */
+  --success-500: #3f8f63;
+  --success-100: #eaf5ef;
+  --warning-500: #b8801f;
+  --warning-100: #fbf3e2;
+  --danger-500: #c0453c;
+  --danger-100: #fbeeed;
+  --info-500: #6b625c;
+
+  /* ---------- 中性色（暖调） ---------- */
+  --neutral-0: #ffffff;
+  --neutral-25: #fbfaf9;
+  --neutral-50: #f7f5f3;
+  --neutral-100: #f1eeeb;
+  --neutral-200: #e7e2dd;
+  --neutral-300: #d6cfc8;
+  --neutral-400: #a89e97;
+  --neutral-500: #857a73;
+  --neutral-600: #6b625c;
+  --neutral-700: #4b433e;
+  --neutral-800: #302a26;
+  --neutral-900: #241f1c;
+
+  /* ---------- 深色侧边栏（暖浓缩咖啡色，非纯黑） ---------- */
+  --sidebar-bg: #201a17;
+  --sidebar-bg-soft: #2a2320;
+  --sidebar-text: rgba(255, 255, 255, 0.7);
+  --sidebar-text-strong: #ffffff;
+  --sidebar-divider: rgba(255, 255, 255, 0.08);
+
+  /* ---------- 语义化表面 / 文本 ---------- */
+  --bg-app: var(--neutral-50);
+  --surface: var(--neutral-0);
+  --surface-sunken: var(--neutral-100);
+  --border-color: var(--neutral-200);
+  --border-color-strong: var(--neutral-300);
+
+  --text-primary: var(--neutral-900);
+  --text-regular: var(--neutral-700);
+  --text-secondary: var(--neutral-600);
+  --text-placeholder: var(--neutral-400);
+
+  /* ---------- 圆角 ---------- */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 999px;
+
+  /* ---------- 阴影（暖调、低透明度、分层） ---------- */
+  --shadow-xs: 0 1px 2px rgba(36, 31, 28, 0.05);
+  --shadow-sm: 0 1px 3px rgba(36, 31, 28, 0.06), 0 1px 2px rgba(36, 31, 28, 0.04);
+  --shadow-md: 0 4px 14px -3px rgba(36, 31, 28, 0.1), 0 2px 5px -2px rgba(36, 31, 28, 0.05);
+  --shadow-lg: 0 18px 36px -14px rgba(36, 31, 28, 0.18), 0 6px 12px -6px rgba(36, 31, 28, 0.07);
+  --shadow-brand: 0 6px 18px -6px rgba(194, 96, 60, 0.42);
+
+  /* ---------- 间距节奏 ---------- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* ---------- 动效缓动（指数缓出，无回弹） ---------- */
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 140ms;
+  --duration-base: 220ms;
+  --duration-slow: 380ms;
+
+  /* ---------- 布局尺寸 ---------- */
+  --sidebar-width: 232px;
+  --sidebar-width-collapsed: 64px;
+  --header-height: 60px;
+
+  /* ---------- 字体 ---------- */
+  --font-sans: "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", "Hiragino Sans GB",
+    system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+
+/* 尊重系统「减少动态效果」设置 */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+    --duration-base: 0ms;
+    --duration-slow: 0ms;
+  }
+}
