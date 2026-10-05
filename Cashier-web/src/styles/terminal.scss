@@ -1,0 +1,102 @@
+/* ============================================================
+ * 收银台专属样式层
+ * ------------------------------------------------------------
+ * 通用令牌（品牌色 / 中性色 / 圆角 / 阴影）来自 Web-shared 的 tokens.scss，
+ * 这里只补「触屏收银台」才需要的尺寸与质感：
+ * 门店收银机通常是 1080p 触屏 + 站立操作，因此触控目标、票券纸质感
+ * 与大号数字金额是这一层的核心。不得在此重复定义品牌色。
+ * ============================================================ */
+
+:root {
+  /* 顶部通道导航高度：比后台更高，方便站立时单手点按 */
+  --chrome-height: 68px;
+  /* 右侧票券栏宽度：够放下菜名 + 规格 + 数量步进 */
+  --ticket-width: 400px;
+  /* 菜品卡片最小宽度：网格随屏幕自动回流 */
+  --tile-min-width: 168px;
+  /* 触控目标最小边长（WCAG 2.5.5 建议 ≥ 44px） */
+  --touch-size: 44px;
+
+  /* 票券纸：略微暖于纯白，避免触屏上刺眼 */
+  --paper: #fffdfa;
+  --paper-rule: var(--neutral-200);
+}
+
+/* ============================================================
+ * 页面外壳：非 POS 页（订单 / 收款 / 我的）自带滚动与留白
+ * ============================================================ */
+.terminal-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  height: 100%;
+  min-width: 0;
+  overflow-y: auto;
+  padding: var(--space-5) var(--space-6) var(--space-10);
+}
+
+/* ============================================================
+ * 票券纸质感
+ * ============================================================ */
+
+/* 齿孔边：用径向渐变重复出撕口，比切图更省且不糊 */
+.receipt-edge {
+  height: 9px;
+  background-repeat: repeat-x;
+  background-size: 12px 9px;
+  background-image: radial-gradient(circle at 6px 9px, transparent 4.5px, var(--paper) 5px);
+}
+
+/* 明细行之间的虚线，模拟小票分隔 */
+.receipt-rule {
+  border-top: 1px dashed var(--paper-rule);
+}
+
+/* ============================================================
+ * 动效：POS 页首屏与加购反馈
+ * ============================================================ */
+
+/* 菜品卡片入场的极轻上浮（配合 animation-delay 做错峰） */
+@keyframes tile-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 加购瞬间票券栏合计的一次脉冲，给「按到了」的即时反馈 */
+@keyframes amount-pulse {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.045);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* 收款成功印章：从略大的尺度压回原位 */
+@keyframes stamp-in {
+  from {
+    opacity: 0;
+    transform: scale(1.22) rotate(-6deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(-4deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tile-in,
+  .amount-pulse,
+  .stamp-in {
+    animation: none !important;
+  }
+}
