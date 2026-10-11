@@ -4,6 +4,7 @@ import { fetchMenu } from '@/api/public';
 import { ErrorCode } from '@/types/error-codes';
 import { useAppStore } from '@/store/app';
 import { useCartStore } from '@/store/cart';
+import { setLastMerchantId } from '@/utils/auth';
 import type { MenuCategory, MenuDish, PublicStore } from '@/types/api';
 
 /**
@@ -20,6 +21,24 @@ export const useMenuStore = defineStore('menu', () => {
   const error = ref('');
   /** 业务码单独留一份：首页要区分「二维码失效」与「网络不通」两种失败 */
   const errorCode = ref(0);
+  /**
+   * 首页点分类宫格 / 推荐位后要定位到菜单页的哪一组。
+   *
+   * 原生 switchTab 不能带 query，所以这个「待定位」目标只能放在 store 里，
+   * 由菜单页 onShow 取用后清空。
+   */
+  const focus = ref<{ categoryId?: number; dishId?: number } | null>(null);
+
+  function requestFocus(target: { categoryId?: number; dishId?: number }): void {
+    focus.value = target;
+  }
+
+  function takeFocus(): { categoryId?: number; dishId?: number } | null {
+    const pending = focus.value;
+    focus.value = null;
+    return pending;
+  }
+
   /** 命中限流时的退避秒数：倒计时结束前不再发请求 */
   const retryIn = ref(0);
 
@@ -54,6 +73,8 @@ export const useMenuStore = defineStore('menu', () => {
       errorCode.value = 0;
       // 店名与营业状态在确认页、收银台都要用，统一挂在 app store 上
       useAppStore().store = menu.store;
+      // 记住这次进的商户：「我的」页的资产是按商户的，冷启动直接切到那一页时靠它取值
+      setLastMerchantId(menu.store.merchantId);
       return true;
     } catch (cause) {
       const code = (cause as { code?: number }).code ?? 0;
@@ -90,6 +111,8 @@ export const useMenuStore = defineStore('menu', () => {
     retryIn,
     load,
     enter,
+    requestFocus,
+    takeFocus,
     findDish,
     pickByIds,
     recommended,

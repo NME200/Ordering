@@ -1,131 +1,147 @@
-<script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+<script lang="ts">
+import { defineComponent, computed, ref, watch, type PropType } from 'vue';
+import LineIcon from '@/components/LineIcon.vue';
 import { specAmountOf, specSummaryOf } from '@/store/cart';
-import { yuan } from '@/utils/format';
-import type { MenuDish, SpecGroup } from '@/types/api';
+import type { MenuDish } from '@/types/api';
+
+/** 后端 SpecType：1 单选 / 2 多选（没有 0，之前按 0/1 解读会让必选单选组永远预选不上） */
+const SpecType = { SINGLE: 1, MULTI: 2 } as const;
 
 /**
- * 规格选择弹层（原型 S2）。
+ * 商品规格弹层（ui.md 第 4 节）。
  *
- * 必选的单选组默认选中第一项：点餐场景里「杯型」这种组不给默认值，
- * 顾客每次都要多点一下，而绝大多数人就是要第一个。
+ * 单选组必选时默认选中第一项 —— 后端下单要校验必选组，
+ * 界面留空只会让顾客在提交时被打回来，体验更差。
+ * 价格随规格实时联动，加料显示 `+¥3` 这样的增量。
  */
-const props = defineProps<{ dish: MenuDish | null }>();
+export default defineComponent({
+  name: 'SpecSheet',
+  components: { LineIcon },
+  props: {
+    dish: { type: Object as PropType<MenuDish | null>, default: null },
+  },
+  emits: {
+    close: () => true,
+    confirm: (_payload: { dish: MenuDish; specOptionIds: number[]; quantity: number }) => true,
+  },
+  setup(props, { emit }) {
+    const selected = ref<number[]>([]);
+    const quantity = ref(1);
 
-const emit = defineEmits<{
-  (event: 'close'): void;
-  (event: 'confirm', payload: { dish: MenuDish; specOptionIds: number[]; quantity: number }): void;
-}>();
+    watch(
+      () => props.dish?.id,
+      () => {
+        const dish = props.dish;
+        if (!dish) return;
+        // 必选单选组先给个默认值，多选组一律不默认选
+        selected.value = dish.specGroups
+          .filter((group) => group.isRequired && group.type === SpecType.SINGLE)
+          .map((group) => group.options[0]?.id)
+          .filter((id): id is number => id !== undefined);
+        quantity.value = 1;
+      },
+      { immediate: true },
+    );
 
-const selected = ref<Map<number, number[]>>(new Map());
-const quantity = ref(1);
+    const unitPrice = computed(() => {
+      const dish = props.dish;
+      if (!dish) return 0;
+      return dish.price + specAmountOf(dish, selected.value);
+    });
+    const total = computed(() => unitPrice.value * quantity.value);
 
-function defaults(dish: MenuDish | null): Map<number, number[]> {
-  const map = new Map<number, number[]>();
-  if (!dish) return map;
-  dish.specGroups.forEach((group) => {
-    const first = group.options[0];
-    map.set(group.id, group.isRequired && group.type === 0 && first ? [first.id] : []);
-  });
-  return map;
-}
+    function toggle(groupId: number, optionId: number, multiple: boolean): void {
+      if (multiple) {
+        selected.value = selected.value.includes(optionId)
+          ? selected.value.filter((id) => id !== optionId)
+          : [...selected.value, optionId];
+        return;
+      }
+      // 单选组里再点已选项等于取消，会让必选组变空 —— 所以直接忽略
+      if (selected.value.includes(optionId)) {
+        const group = props.dish?.specGroups.find((item) => item.id === groupId);
+        if (group?.isRequired) return;
+        selected.value = selected.value.filter((id) => id !== optionId);
+        return;
+      }
+      const ids = props.dish?.specGroups.find((item) => item.id === groupId)?.options.map((o) => o.id) ?? [];
+      selected.value = [...selected.value.filter((id) => !ids.includes(id)), optionId];
+    }
 
-watch(() => props.dish?.id, () => {
-  selected.value = defaults(props.dish);
-  quantity.value = 1;
+    function add(): void {
+      const dish = props.dish;
+      if (!dish) return;
+      const missing = dish.specGroups.find(
+        (group) => group.isRequired && group.type === SpecType.SINGLE && !selected.value.some((id) => group.options.some((o) => o.id === id)),
+      );
+      if (missing) {
+        uni.showToast({ title: `请选${missing.name}`, icon: 'none' });
+        return;
+      }
+      emit('confirm', { dish, specOptionIds: [...selected.value], quantity: quantity.value });
+    }
+
+    return { selected, quantity, unitPrice, total, toggle, add, SpecType };
+  },
 });
-
-const groups = computed<SpecGroup[]>(() => props.dish?.specGroups ?? []);
-const hasGroups = computed(() => groups.value.length > 0);
-
-const chosenIds = computed(() => {
-  const ids: number[] = [];
-  selected.value.forEach((list) => ids.push(...list));
-  return ids;
-});
-
-/** 单价 = 本店有效价 + 规格增量 */
-const unitAmount = computed(() =>
-  props.dish ? props.dish.price + specAmountOf(props.dish, chosenIds.value) : 0,
-);
-
-function isSelected(groupId: number, optionId: number): boolean {
-  return (selected.value.get(groupId) ?? []).includes(optionId);
-}
-
-function toggle(groupId: number, optionId: number, type: 0 | 1): void {
-  const current = selected.value.get(groupId) ?? [];
-  const next = type === 0
-    ? (current.includes(optionId) ? [] : [optionId])
-    : (current.includes(optionId) ? current.filter((id) => id !== optionId) : [...current, optionId]);
-  // 重建 Map：小程序端响应式对 Map 的原地 set 不敏感
-  const map = new Map(selected.value);
-  map.set(groupId, next);
-  selected.value = map;
-}
-
-const missingRequired = computed(() =>
-  groups.value.some((group) => group.isRequired && (selected.value.get(group.id) ?? []).length === 0),
-);
-
-function confirm(): void {
-  if (!props.dish || missingRequired.value) return;
-  emit('confirm', { dish: props.dish, specOptionIds: chosenIds.value, quantity: quantity.value });
-}
 </script>
 
 <template>
-  <view v-if="dish" class="sheet-mask" @click="emit('close')">
+  <view v-if="dish" class="sheet-mask" @click="$emit('close')">
     <view class="sheet" @click.stop>
-      <view class="sheet__head">
-        <text class="sheet__title">{{ dish.name }}</text>
-        <text class="sheet__close" @click="emit('close')">关闭</text>
+      <view class="sheet__handle" />
+
+      <view class="goods">
+        <view class="goods__pic">
+          <image v-if="dish.imageUrl" class="goods__img" :src="dish.imageUrl" mode="aspectFill" />
+          <text v-else class="goods__initial">{{ dish.name.slice(0, 1) }}</text>
+        </view>
+        <view class="goods__body">
+          <text class="goods__name">{{ dish.name }}</text>
+          <text class="goods__price num"><text class="goods__cny">¥</text>{{ (unitPrice / 100).toFixed(2) }}</text>
+          <text v-if="dish.monthlySales > 0" class="goods__sales num">月售 {{ dish.monthlySales }}</text>
+        </view>
+        <view class="sheet__close">
+          <LineIcon name="close" :size="20" tone="sub" @click="$emit('close')" />
+        </view>
       </view>
 
-      <scroll-view class="sheet__body" scroll-y>
-        <text v-if="dish.description" class="sheet__desc">{{ dish.description }}</text>
-
-        <view v-if="!hasGroups" class="sheet__plain">
-          <text class="sheet__plain-line">无规格 · 直接按份数加购</text>
-        </view>
-
-        <view v-for="group in groups" :key="group.id" class="spec">
-          <view class="spec__head">
-            <text class="spec__name">{{ group.name }}</text>
-            <text class="spec__type">
-              {{ group.type === 0 ? '单选' : '多选' }}{{ group.isRequired ? ' · 必选' : '' }}
-            </text>
-          </view>
-          <view class="spec__chips">
+      <scroll-view class="groups" scroll-y>
+        <view v-for="group in dish.specGroups" :key="group.id" class="group">
+          <text class="group__title">
+            {{ group.name }}
+            <text v-if="group.isRequired" class="group__req">必选</text>
+          </text>
+          <view class="group__options">
             <view
               v-for="option in group.options"
               :key="option.id"
-              class="chip"
-              :class="{ 'is-on': isSelected(group.id, option.id) }"
-              @click="toggle(group.id, option.id, group.type)"
+              class="chip group__chip"
+              :class="{ 'is-on': selected.includes(option.id) }"
+              @click="toggle(group.id, option.id, group.type === SpecType.MULTI)"
             >
               <text>{{ option.name }}</text>
-              <text v-if="option.priceDiff" class="chip__diff num">
-                {{ option.priceDiff > 0 ? '+' : '−' }}¥{{ yuan(Math.abs(option.priceDiff)) }}
+              <text v-if="option.priceDiff" class="group__diff num">
+                {{ option.priceDiff > 0 ? '+' : '-' }}¥{{ (Math.abs(option.priceDiff) / 100).toFixed(0) }}
               </text>
             </view>
           </view>
         </view>
-
-        <view class="qty">
-          <text class="qty__label">数量</text>
-          <view class="qty__stepper">
-            <text class="qty__btn" :class="{ 'is-off': quantity <= 1 }" @click="quantity > 1 && (quantity -= 1)">−</text>
-            <text class="qty__num num">{{ quantity }}</text>
-            <text class="qty__btn" @click="quantity += 1">＋</text>
-          </view>
-        </view>
+        <view class="groups__pad" />
       </scroll-view>
 
       <view class="sheet__foot">
-        <view class="sheet__submit" :class="{ 'is-off': missingRequired }" @click="confirm">
-          <text>{{ missingRequired ? '还有必选规格没选' : '加入购物袋' }}</text>
-          <text class="sheet__price num">¥{{ yuan(unitAmount * quantity) }}</text>
+        <view class="stepper">
+          <view class="stepper__btn" :class="{ 'is-off': quantity <= 1 }" @click="quantity > 1 && quantity--">
+            <LineIcon name="minus" :size="16" color="#3a322c" />
+          </view>
+          <text class="stepper__value num">{{ quantity }}</text>
+          <view class="stepper__btn" @click="quantity++">
+            <LineIcon name="plus" :size="16" color="#3a322c" />
+          </view>
+        </view>
+        <view class="btn-main confirm" @click="add">
+          加入购物车 ¥{{ (total / 100).toFixed(2) }}
         </view>
       </view>
     </view>
@@ -133,181 +149,144 @@ function confirm(): void {
 </template>
 
 <style scoped lang="scss">
-.sheet-mask {
-  position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  z-index: 20;
-  background-color: rgba(36, 31, 28, 0.42);
+.goods {
+  position: relative;
   display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
+  gap: 20rpx;
+  padding: 24rpx 32rpx 8rpx;
 }
 
-.sheet {
-  background-color: #fff;
-  border-top: 1rpx solid $hair;
-  border-radius: 20rpx 20rpx 0 0;
-  padding-bottom: env(safe-area-inset-bottom);
-  display: flex;
-  flex-direction: column;
-  max-height: 82vh;
-}
-
-.sheet__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 28rpx 32rpx 20rpx;
-  border-bottom: 1rpx solid $hair;
-}
-
-.sheet__title {
-  font-size: 32rpx;
-  font-weight: 600;
-}
-
-.sheet__close {
-  font-size: 26rpx;
-  color: $n-400;
-}
-
-.sheet__body {
-  flex: 1;
-  padding: 24rpx 32rpx;
-}
-
-.sheet__desc {
-  font-size: 24rpx;
-  line-height: 1.6;
-  color: $n-500;
-}
-
-.sheet__plain {
-  padding: 24rpx 0;
-}
-
-.sheet__plain-line {
-  font-size: 26rpx;
-  color: $n-400;
-}
-
-.spec {
-  padding: 28rpx 0 4rpx;
-
-  &__head {
-    display: flex;
-    align-items: baseline;
-    gap: 12rpx;
-  }
-
-  &__name {
-    font-size: 28rpx;
-    font-weight: 600;
-  }
-
-  &__type {
-    font-size: 22rpx;
-    color: $n-400;
-  }
-
-  &__chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 16rpx;
-    margin: 18rpx 0 8rpx;
-  }
-}
-
-.chip {
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-  padding: 12rpx 24rpx;
-  border: 1rpx solid $n-200;
-  border-radius: 999rpx;
-  font-size: 26rpx;
-  color: $n-700;
-
-  &.is-on {
-    border-color: var(--brand, #{$brand-500});
-    background-color: var(--brand-soft, #{$brand-50});
-    color: var(--brand, #{$brand-500});
-  }
-
-  &__diff {
-    font-size: 22rpx;
-    color: $n-500;
-  }
-
-  &.is-on &__diff {
-    color: var(--brand, #{$brand-500});
-  }
-}
-
-.qty {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 32rpx 0 8rpx;
-
-  &__label {
-    font-size: 28rpx;
-    font-weight: 600;
-  }
-
-  &__stepper {
-    display: flex;
-    align-items: center;
-    border: 1rpx solid $n-200;
-    border-radius: 999rpx;
-  }
-
-  &__btn {
-    width: 64rpx;
-    text-align: center;
-    font-size: 32rpx;
-    line-height: 60rpx;
-    color: $n-700;
-
-    &.is-off {
-      color: $n-300;
-    }
-  }
-
-  &__num {
-    width: 56rpx;
-    text-align: center;
-    font-size: 28rpx;
-  }
-}
-
-.sheet__foot {
-  padding: 20rpx 32rpx 32rpx;
-  border-top: 1rpx solid $hair;
-}
-
-.sheet__submit {
+.goods__pic {
+  width: 160rpx;
+  height: 160rpx;
+  flex: none;
+  border-radius: var(--radius-tile, 12px);
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 16rpx;
-  height: 92rpx;
-  border-radius: 999rpx;
-  background-color: var(--brand, #{$brand-500});
-  color: #fff;
-  font-size: 30rpx;
-  font-weight: 600;
-
-  &.is-off {
-    background-color: $n-200;
-    color: $n-400;
-  }
+  background-color: var(--brand-soft, rgba(200, 117, 43, 0.08));
 }
 
-.sheet__price {
+.goods__img {
+  width: 100%;
+  height: 100%;
+}
+
+.goods__initial {
+  font-size: 52rpx;
+  color: var(--brand, #c8752b);
+}
+
+.goods__body {
+  flex: 1;
+  min-width: 0;
+  padding-top: 6rpx;
+}
+
+.goods__name {
+  display: block;
+  font-size: 34rpx;
+  font-weight: 700;
+}
+
+.goods__price {
+  display: block;
+  margin-top: 10rpx;
+  font-size: 40rpx;
+  font-weight: 700;
+  color: var(--brand, #c8752b);
+}
+
+.goods__cny {
+  font-size: 24rpx;
+  margin-right: 2rpx;
+}
+
+.goods__sales {
+  display: block;
+  margin-top: 4rpx;
+  font-size: 22rpx;
+  color: var(--ink-2, #{$n-500});
+}
+
+.groups {
+  max-height: 44vh;
+  padding: 8rpx 32rpx 0;
+}
+
+.group {
+  padding: 20rpx 0 4rpx;
+}
+
+.group__title {
+  display: block;
+  margin-bottom: 16rpx;
+  font-size: 26rpx;
+  color: var(--ink-2, #{$n-500});
+}
+
+.group__req {
+  margin-left: 8rpx;
+  font-size: 20rpx;
+  color: var(--brand, #c8752b);
+}
+
+.group__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+}
+
+.group__chip {
+  font-size: 26rpx;
+}
+
+.group__diff {
+  opacity: 0.8;
+}
+
+.groups__pad {
+  height: 16rpx;
+}
+
+.sheet__foot {
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
+  padding: 20rpx 32rpx 32rpx;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  padding: 0 8rpx;
+  border-radius: 999rpx;
+  background-color: #fff;
+  border: 1rpx solid var(--divider, #{$n-200});
+}
+
+.stepper__btn {
+  width: 60rpx;
+  height: 60rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stepper__btn.is-off {
+  opacity: 0.35;
+}
+
+.stepper__value {
+  min-width: 48rpx;
+  text-align: center;
   font-size: 30rpx;
+  font-weight: 600;
+}
+
+.confirm {
+  flex: 1;
 }
 </style>

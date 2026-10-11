@@ -1,5 +1,6 @@
 import { BASE_URL } from '@/config/env';
 import { ErrorCode } from '@/types/error-codes';
+import { clearCustomerToken, getCustomerToken } from '@/utils/auth';
 
 /** 后端统一信封：`{ code, message, data }`，code 0 为成功 */
 interface Envelope<T> {
@@ -7,6 +8,15 @@ interface Envelope<T> {
   message: string;
   data: T | null;
 }
+
+/**
+ * 顾客令牌失效的业务码。
+ *
+ * 10002 未登录 / 100001 账号不存在 / 100002 令牌不合法：
+ * 命中这几个就把本地令牌清掉，下一次进页面会重新静默注册。
+ * 不清的话，顾客被封禁或换过设备后每个请求都稳定 401，界面永远转圈。
+ */
+const TOKEN_DEAD_CODES = new Set<number>([10002, 100001, 100002]);
 
 export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
@@ -48,12 +58,17 @@ function notify(message: string): void {
 
 export function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   return new Promise<T>((resolve, reject) => {
+    const token = getCustomerToken();
     uni.request({
       url: `${BASE_URL}${path}`,
       method: options.method ?? 'GET',
       data: options.data,
       timeout: options.timeout ?? 10000,
-      header: { 'Content-Type': 'application/json' },
+      header: {
+        'Content-Type': 'application/json',
+        // 匿名接口带着也无妨：后端 @Public() 分支不看这个头，顾客接口靠它认人
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       success: (res) => {
         const body = res.data as Envelope<T> | null;
         const ok = res.statusCode >= 200 && res.statusCode < 300 && body?.code === ErrorCode.SUCCESS;
@@ -61,6 +76,7 @@ export function request<T>(path: string, options: RequestOptions = {}): Promise<
           resolve(body!.data as T);
           return;
         }
+        if (TOKEN_DEAD_CODES.has(body?.code ?? -1)) clearCustomerToken();
         const error = new ApiError(
           body?.code ?? ErrorCode.UNKNOWN,
           body?.message || `请求失败（HTTP ${res.statusCode}）`,

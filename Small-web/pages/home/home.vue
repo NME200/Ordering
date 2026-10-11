@@ -1,273 +1,221 @@
 <script lang="ts">
-import { defineComponent, computed } from 'vue';
-import HomeBanner from '@/components/home/HomeBanner.vue';
-import HomeCategoryNav from '@/components/home/HomeCategoryNav.vue';
-import HomeHotDishes from '@/components/home/HomeHotDishes.vue';
-import HomeNotice from '@/components/home/HomeNotice.vue';
+import { defineComponent, computed, ref } from 'vue';
+import DiyBanner from '@/components/diy/DiyBanner.vue';
+import DiyCouponEntry from '@/components/diy/DiyCouponEntry.vue';
+import DiyEntryGrid from '@/components/diy/DiyEntryGrid.vue';
+import DiyNotice from '@/components/diy/DiyNotice.vue';
+import DiySearchBar from '@/components/diy/DiySearchBar.vue';
+import DiyShopList from '@/components/diy/DiyShopList.vue';
+import PopupLayer from '@/components/PopupLayer.vue';
+import { fetchStores } from '@/api/public';
 import { useAppStore } from '@/store/app';
-import { useMenuStore } from '@/store/menu';
-import { ErrorCode } from '@/types/error-codes';
-import { yuan } from '@/utils/format';
+import { distanceLabel, distanceMeters, locate } from '@/utils/geo';
+import { openLink } from '@/utils/nav';
+import { triggerPopup } from '@/utils/popup-manager';
+import { applyScanQuery, applyScanResult } from '@/utils/scan';
+import type { PublicStoreListItem, SectionKey } from '@/types/api';
+
+/** 这一版小程序认识的首页组件；白名单外的 key 整块跳过，后端加组件不会打挂老版本 */
+const KNOWN_KEYS: SectionKey[] = ['banner', 'entryGrid', 'searchBar', 'notice', 'shopList', 'couponEntry'];
+
+/** 记住上次进的门店：从「我的小程序」重进时没有扫码参数 */
+const STORE_KEY = 'last-store-id-v1';
 
 export default defineComponent({
-  components: { HomeBanner, HomeCategoryNav, HomeHotDishes, HomeNotice },
+  components: { DiyBanner, DiyCouponEntry, DiyEntryGrid, DiyNotice, DiySearchBar, DiyShopList, PopupLayer },
 
   setup() {
     const app = useAppStore();
-    const menu = useMenuStore();
+    /** 冷启动弹窗只在第一次进首页时按 app_launch 场景触发 */
+    const firstShow = ref(true);
 
-    const storeId = computed(() => menu.storeId);
-    /** 后端加了新组件而这一版小程序不认识时，整块跳过而不是报错白屏 */
-    const known = computed(() =>
-      app.sections.filter((section) =>
-        ['banner', 'notice', 'categoryNav', 'hotDishes'].includes(section.key),
-      ),
+    const shops = ref<PublicStoreListItem[]>([]);
+    const distances = ref<Record<number, string>>({});
+
+    const sections = computed(() =>
+      app.sectionsOf('home').filter((item) => KNOWN_KEYS.includes(item.key)),
     );
+    /** 只有首页真摆了门店列表位，才值得去拉门店列表与定位 */
+    const needsShops = computed(() => sections.value.some((item) => item.key === 'shopList'));
 
-    const hotDishes = computed(() => {
-      const section = app.section('hotDishes');
-      if (!section) return [];
-      if (section.props.source === 'manual') return menu.pickByIds(section.props.dishIds);
-      return menu.recommended().slice(0, 12);
-    });
-
-    async function boot(id: number, force: boolean): Promise<void> {
-      if (!id) {
-        uni.redirectTo({ url: '/pages/index/index' });
-        return;
+    /**
+     * 距离在前端算：后端不收顾客位置（匿名接口不该知道它，且人一动就变）。
+     * 拒绝授权是常态，所以不弹提示、不引导去设置 —— 少显示一行比打断点餐重要。
+     */
+    async function loadShops(): Promise<void> {
+      if (!needsShops.value) return;
+      const limit = sections.value.find((item) => item.key === 'shopList')?.props.limit ?? 6;
+      try {
+        const res = await fetchStores({ limit: 20 });
+        const here = await locate();
+        app.position = here;
+        const list: PublicStoreListItem[] = [];
+        const map: Record<number, string> = {};
+        for (const store of res.stores) {
+          if (here && store.latitude !== null && store.longitude !== null) {
+            const meters = distanceMeters(here.latitude, here.longitude, store.latitude, store.longitude);
+            if (meters !== null) map[store.id] = distanceLabel(meters).replace('距您 ', '');
+          }
+          list.push(store);
+        }
+        const sortMode = sections.value.find((item) => item.key === 'shopList')?.props.sortMode ?? 'distance';
+        if (sortMode === 'sales') list.sort((a, b) => b.monthlySales - a.monthlySales);
+        else list.sort((a, b) => (map[a.id] ? 1 : 0) - (map[b.id] ? 1 : 0));
+        shops.value = list.slice(0, limit);
+        distances.value = map;
+      } catch {
+        shops.value = [];
       }
-      await menu.enter(id, force);
     }
 
-    function goMenu(query: Record<string, string | number>): void {
-      const parts = Object.entries(query)
-        .filter(([, value]) => value !== '' && value !== undefined && value !== 'all')
-        .map(([key, value]) => `${key}=${value}`)
-        .join('&');
-      uni.navigateTo({ url: `/pages/menu/menu?storeId=${storeId.value}${parts ? `&${parts}` : ''}` });
+    /**
+     * 页内「扫一扫」进店。
+     *
+     * 解析统一走 utils/scan：桌码里是 `s=门店&t=桌号`，也可能是店码（只有门店）
+     * 或早期那种纯数字门店 ID 的码。这里再写一份正则的话，桌码格式一改就悄悄失效
+     * （上一版就是这么把桌码判成「没有门店信息」的）。
+     */
+    function scan(): void {
+      uni.scanCode({
+        success: (res) => {
+          const raw = res as { scene?: string; path?: string; result?: string };
+          const hit = applyScanResult(raw);
+          if (hit) {
+            enterStore(hit.storeId);
+            return;
+          }
+          /**
+           * 读到了什么要说出来。
+           *
+           * 「这个码里没有门店信息」这句话 covering 四种完全不同的情况：
+           * 扫到外卖平台的码、贴错桌、码本身没问题但扫的是**未发布小程序的正式版码**、
+           * 以及在开发者工具模拟器里扫小程序码（那种情况下微信根本不给 scene）。
+           * 不把读到的内容带出来，谁都分不清是哪一种。
+           */
+          const read = [raw.scene, raw.path, raw.result].filter(Boolean).join(' / ').slice(0, 40);
+          uni.showToast({
+            title: read ? `这个码读不出门店：${read}` : '没读到内容，请用微信扫一扫桌上的码',
+            icon: 'none',
+            duration: 4000,
+          });
+        },
+        fail: () => uni.showToast({ title: '没能读到二维码', icon: 'none' }),
+      });
     }
 
-    function onLink(link: string): void {
-      if (link.startsWith('/pages/')) {
-        uni.navigateTo({ url: link });
-        return;
-      }
-      uni.showToast({ title: '这个位置还没有配置内容', icon: 'none' });
+    function enterStore(storeId: number): void {
+      uni.setStorageSync(STORE_KEY, storeId);
+      uni.navigateTo({ url: `/pages/menu/menu?storeId=${storeId}` });
     }
 
-    function call(): void {
-      const phone = menu.store?.phone;
-      if (phone) uni.makePhoneCall({ phoneNumber: phone, fail: () => undefined });
+    function onLink(link?: string): void {
+      openLink(link, { scan });
     }
 
-    return { app, menu, known, hotDishes, boot, goMenu, onLink, call, yuan, STORE_NOT_FOUND: ErrorCode.STORE_NOT_FOUND };
+    return {
+      app,
+      firstShow,
+      sections,
+      shops,
+      distances,
+      loadShops,
+      onLink,
+      enterStore,
+      scan,
+    };
   },
 
   onLoad(query) {
-    void this.boot(Number(query?.storeId ?? 0), false);
+    void this.app.loadConfig();
+    // 扫码进入小程序时 scene / storeId 在启动参数上：认出来就直接带进那家店
+    const hit = applyScanQuery((query ?? {}) as Record<string, unknown>);
+    if (hit) this.enterStore(hit.storeId);
   },
 
   onShow() {
-    // 从菜单页返回时刷新：平台端刚发布的新配置与沽清状态都要能立刻反映到首页
     void this.app.loadConfig();
-    if (this.menu.storeId) void this.boot(this.menu.storeId, true);
+    void this.loadShops();
+    /**
+     * 首次进首页跑冷启动场景（延迟 900ms 等首屏画完，别糊在白屏上），
+     * 之后回首页跑 home 场景 —— 两者都靠本地频次记录拦重复。
+     */
+    if (this.firstShow) {
+      this.firstShow = false;
+      void triggerPopup('app_launch', { delay: 900 });
+    } else {
+      void triggerPopup('home');
+    }
+  },
+
+  onPullDownRefresh() {
+    void Promise.all([this.app.loadConfig(), this.loadShops()]).finally(() =>
+      uni.stopPullDownRefresh(),
+    );
   },
 });
 </script>
 
 <template>
   <view class="home" :style="app.cssVars">
-    <view class="head">
-      <view class="head__main">
-        <text class="head__name">{{ menu.store?.name || '加载中' }}</text>
-        <view class="head__meta">
-          <text class="dot" :class="menu.store?.orderable ? 'dot--on' : 'dot--off'" />
-          <text class="head__status">{{ menu.store?.businessStatusLabel || '' }}</text>
-          <text v-if="menu.store?.address" class="head__addr">{{ menu.store.address }}</text>
-        </view>
-      </view>
-      <view v-if="menu.store?.phone" class="head__phone" @click="call">电话</view>
+    <!-- 参考稿：顶部品牌大图 + 五个场景入口，不放定位栏、不放附近商户推荐 -->
+    <block v-for="section in sections" :key="section.id">
+      <DiyBanner v-if="section.key === 'banner'" :config="section.props" @link="onLink" />
+      <DiySearchBar v-else-if="section.key === 'searchBar'" :config="section.props" @link="onLink" />
+      <DiyEntryGrid v-else-if="section.key === 'entryGrid'" :config="section.props" @link="onLink" />
+      <DiyNotice v-else-if="section.key === 'notice'" :config="section.props" />
+      <DiyShopList
+        v-else-if="section.key === 'shopList'"
+        :config="section.props"
+        :stores="shops"
+        :distances="distances"
+        @enter="enterStore"
+        @more="onLink('/pages/stores/stores')"
+      />
+      <DiyCouponEntry v-else-if="section.key === 'couponEntry'" :config="section.props" @link="onLink" />
+    </block>
+
+    <!-- 一个组件都没配时（平台把配置删光）留一条扫码入口，首页不能是空的 -->
+    <view v-if="!sections.length" class="fallback card">
+      <text class="fallback__title">扫码点餐</text>
+      <text class="fallback__sub">扫桌上的点餐码即可下单，无需注册</text>
+      <view class="btn-main fallback__btn" @click="scan">扫一扫点餐</view>
     </view>
 
-    <view v-if="menu.loading && !menu.categories.length" class="skeleton">
-      <view class="skeleton__line" style="width: 60%" />
-      <view class="skeleton__line" style="width: 100%" />
-      <view class="skeleton__line" style="width: 80%" />
-    </view>
-
-    <view v-else-if="menu.error && !menu.categories.length" class="failed">
-      <text class="failed__title">
-        {{ menu.errorCode === STORE_NOT_FOUND ? '二维码已失效' : '没能加载到店信息' }}
-      </text>
-      <text class="failed__line">
-        {{ menu.errorCode === STORE_NOT_FOUND
-          ? '这家店可能已下线、暂停服务或二维码过期，请向店员索取当前有效的点餐码。'
-          : menu.error }}
-      </text>
-      <view class="failed__btn" @click="boot(menu.storeId, true)">重试</view>
-    </view>
-
-    <template v-else>
-      <!-- 后端 sections 的数组顺序 = 首页从上到下的渲染顺序 -->
-      <block v-for="section in known" :key="section.id">
-        <HomeBanner v-if="section.key === 'banner'" :config="section.props" @link="onLink" />
-        <HomeNotice v-else-if="section.key === 'notice'" :config="section.props" />
-        <HomeCategoryNav
-          v-else-if="section.key === 'categoryNav'"
-          :config="section.props"
-          :categories="menu.categories"
-          @pick="goMenu({ categoryId: $event })"
-        />
-        <HomeHotDishes
-          v-else-if="section.key === 'hotDishes'"
-          :config="section.props"
-          :dishes="hotDishes"
-          @pick="goMenu({ dishId: $event.id })"
-        />
-      </block>
-
-      <view class="gap" />
-
-      <view class="summary">
-        <text class="summary__text">本店 {{ menu.dishTotal }} 道在售</text>
-        <text v-if="menu.soldOutTotal" class="summary__sub">{{ menu.soldOutTotal }} 道今日售罄</text>
-      </view>
-
-      <view class="foot">
-        <view class="btn" :class="{ 'is-off': !menu.store?.orderable }" @click="goMenu({})">
-          {{ menu.store?.orderable ? '进入点餐' : menu.store?.orderableHint || '本店当前不接单' }}
-        </view>
-        <text v-if="menu.store && !menu.store.orderable" class="foot__note">仍可浏览菜单，下单请联系店员</text>
-      </view>
-    </template>
+    <PopupLayer />
   </view>
 </template>
 
 <style scoped lang="scss">
 .home {
   min-height: 100vh;
-  padding-bottom: 40rpx;
-  background-color: var(--page-bg, #fff);
+  padding: var(--page-margin, 16px) var(--page-margin, 16px) 80rpx;
+  display: flex;
+  flex-direction: column;
+  gap: var(--section-gap, 12px);
+  background-color: var(--page-bg, #{$n-50});
   color: var(--ink, #{$n-900});
 }
 
-.head {
-  display: flex;
-  align-items: flex-start;
-  gap: 20rpx;
-  padding: 40rpx 32rpx 32rpx;
-
-  &__main {
-    flex: 1;
-    min-width: 0;
-  }
-
-  &__name {
-    font-size: 44rpx;
-    font-weight: 700;
-    letter-spacing: -1rpx;
-  }
-
-  &__meta {
-    display: flex;
-    align-items: center;
-    gap: 10rpx;
-    margin-top: 12rpx;
-  }
-
-  &__status {
-    font-size: 22rpx;
-    color: var(--ink-2, #{$n-600});
-  }
-
-  &__addr {
-    font-size: 22rpx;
-    color: $n-400;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  &__phone {
-    flex: none;
-    padding: 0 26rpx;
-    height: 60rpx;
-    line-height: 60rpx;
-    border: 1rpx solid $n-200;
-    font-size: 24rpx;
-    color: var(--ink-2, #{$n-600});
-  }
-}
-
-.skeleton {
-  padding: 24rpx 32rpx;
-  display: flex;
-  flex-direction: column;
-  gap: 20rpx;
-
-  &__line {
-    height: 24rpx;
-    background-color: $n-100;
-  }
-}
-
-.failed {
-  padding: 120rpx 48rpx;
+.fallback {
+  margin-top: 120rpx;
+  padding: 64rpx 48rpx;
   text-align: center;
 
   &__title {
     display: block;
-    font-size: 32rpx;
-    font-weight: 600;
-  }
-
-  &__line {
-    display: block;
-    margin-top: 14rpx;
-    font-size: 24rpx;
-    line-height: 1.6;
-    color: $n-500;
-  }
-
-  &__btn {
-    display: inline-block;
-    margin-top: 40rpx;
-    padding: 0 48rpx;
-    height: 72rpx;
-    line-height: 72rpx;
-    border: 1rpx solid var(--brand, #{$brand-500});
-    border-radius: 999rpx;
-    font-size: 26rpx;
-    color: var(--brand, #{$brand-500});
-  }
-}
-
-.summary {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  padding: 28rpx 32rpx 0;
-
-  &__text {
-    font-size: 24rpx;
-    color: var(--ink-2, #{$n-600});
+    font-size: 44rpx;
+    font-weight: 700;
   }
 
   &__sub {
-    font-size: 22rpx;
-    color: $n-400;
-  }
-}
-
-.foot {
-  padding: 40rpx 32rpx 0;
-
-  &__note {
     display: block;
-    margin-top: 18rpx;
-    text-align: center;
-    font-size: 22rpx;
-    color: $n-400;
+    margin-top: 16rpx;
+    font-size: 26rpx;
+    color: var(--ink-2, #{$n-500});
+  }
+
+  &__btn {
+    margin-top: 56rpx;
   }
 }
 </style>

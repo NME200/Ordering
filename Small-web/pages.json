@@ -1,47 +1,107 @@
 {
   "pages": [
     {
-      "path": "pages/index/index",
+      "path": "pages/home/home",
       "style": {
-        "navigationBarTitleText": "点餐"
+        "enablePullDownRefresh": true
       }
     },
     {
-      "path": "pages/home/home",
+      "path": "pages/stores/stores",
       "style": {
-        "navigationBarTitleText": "点餐"
+        "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/menu/menu",
+      "style": {}
+    },
+    {
+      "path": "pages/orders/orders",
       "style": {
-        "navigationBarTitleText": "点餐"
+        "enablePullDownRefresh": true
       }
+    },
+    {
+      "path": "pages/profile/profile",
+      "style": {}
     },
     {
       "path": "pages/confirm/confirm",
-      "style": {
-        "navigationBarTitleText": "确认订单"
-      }
+      "style": {}
     },
     {
       "path": "pages/pay/pay",
+      "style": {}
+    },
+    {
+      "path": "pages/order-detail/order-detail",
+      "style": {}
+    },
+    {
+      "path": "pages/address/address",
+      "style": {}
+    },
+    {
+      "path": "pages/coupon/coupon",
       "style": {
-        "navigationBarTitleText": "收银台"
+        "enablePullDownRefresh": true
       }
     },
     {
-      "path": "pages/order/order",
+      "path": "pages/card/card",
+      "style": {}
+    },
+    {
+      "path": "pages/invoice/invoice",
       "style": {
-        "navigationBarTitleText": "订单详情"
+        "enablePullDownRefresh": true
       }
+    },
+    {
+      "path": "pages/service/service",
+      "style": {}
+    },
+    {
+      "path": "pages/review/review",
+      "style": {}
+    },
+    {
+      "path": "pages/queue/queue",
+      "style": {
+        "enablePullDownRefresh": true
+      }
+    },
+    {
+      "path": "pages/settings/settings",
+      "style": {}
     }
   ],
+  "tabBar": {
+    "color": "#9a908a",
+    "selectedColor": "#c8752b",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/home/home",
+        "text": "首页"
+      },
+      {
+        "pagePath": "pages/orders/orders",
+        "text": "订单"
+      },
+      {
+        "pagePath": "pages/profile/profile",
+        "text": "我的"
+      }
+    ]
+  },
   "globalStyle": {
     "navigationBarTextStyle": "black",
-    "navigationBarTitleText": "点餐",
-    "navigationBarBackgroundColor": "#ffffff",
-    "backgroundColor": "#ffffff",
+    "navigationBarTitleText": "",
+    "navigationBarBackgroundColor": "#faf8f6",
+    "backgroundColor": "#faf8f6",
     "backgroundTextStyle": "dark"
   }
 }

@@ -76,41 +76,53 @@ $uni-color-paragraph: #3F536E; // 文章段落颜色
 $uni-font-size-paragraph:15px;
 
 /* ============================================================
- * Ordering 顾客端设计令牌（与 Admin/Merchant/Cashier 三端同一套色板）
+ * Ordering 顾客端设计令牌 v3 —— 依据 `Small-web/doc/ui.md` 第一节
  *
- * 视觉语言是「扁平到底」：全站零投影、无卡片框，分组只用发丝线与间隙条两种。
- * 主色/底色/文字色这三项运行期由平台下发的装修配置覆盖（store/app 的 cssVars），
- * 这里的 SCSS 变量只作兜底与不参与换肤的语义色（成功/警示/错误）。
+ * 暖橙 + 极浅暖灰白底 + 半透明白毛玻璃卡片；圆角卡片 16px、按钮与弹层胶囊 24px；
+ * 卡片间距 8px、区块间距 12px、页边距 16px；图标统一 1.5px 细线线稿。
+ *
+ * **可换肤的量一律走 CSS 变量**（store/app 的 cssVars 在页面根节点下发），
+ * 这里的 SCSS 变量只当兜底与不参与换肤的语义色。写在 SCSS 里的强调色，
+ * 平台改色时是跟不上的 —— 这是上一轮踩过的坑（CODEBUDDY §7.1）。
  * ============================================================ */
 
-/* 品牌色 */
-$brand-50: #fdf6f3;
-$brand-100: #f9efec;
-$brand-200: #f3dfd8;
-$brand-400: #d4825f;
-$brand-500: #c2603c;
-$brand-600: #a94f2f;
-$brand-700: #8d4026;
+/* 品牌色（兜底值，运行期被 --brand / --brand-sub 覆盖） */
+$brand: #c8752b;
+$brand-sub: #8b5e3c;
+$brand-soft: rgba(200, 117, 43, 0.08);
 
-/* 语义色 */
+/* 语义色：营业中 / 提醒 / 错误，不参与换肤 */
 $ok: #3f8f63;
-$ok-bg: #eaf5ef;
+$ok-soft: rgba(63, 143, 99, 0.12);
 $warn: #b8801f;
-$warn-bg: #fbf3e2;
 $err: #c0453c;
-$err-bg: #fbeeed;
+$err-soft: rgba(192, 69, 60, 0.1);
 
-/* 中性色 */
-$n-50: #f7f5f3;
-$n-100: #f1eeeb;
-$n-200: #e7e2dd;
-$n-300: #d6cfc8;
-$n-400: #a89e97;
-$n-500: #857a73;
-$n-600: #6b625c;
-$n-700: #4b433e;
-$n-900: #241f1c;
+/* 中性色（暖调，与主色同源，避免冷灰的廉价感） */
+$n-0: #ffffff;
+$n-50: #faf8f6;
+$n-100: #f4f1ee;
+$n-200: #efebe7;
+$n-300: #e2dcd6;
+$n-400: #c3bab2;
+$n-500: #9a908a;
+$n-600: #7a716a;
+$n-700: #5a524b;
+$n-900: #3a322c;
 
-/* 全站唯一的两种分组语言 */
-$hair: #f0ece9;
-$gap: #f7f5f3;
+/* 形状：卡片 16px / 胶囊 24px（按钮与弹层顶部）；卡片内小元素用 12px */
+$radius-card: 16px;
+$radius-tile: 12px;
+$radius-pill: 24px;
+
+/* 版式（设计稿是 px，这里换算成 rpx 供栅格使用） */
+$gap-card: 8px;
+$gap-section: 12px;
+$page-margin: 16px;
+$font-title: 34rpx;
+$font-body: 28rpx;
+$font-sub: 24rpx;
+
+/* 内容型页面（确认订单 / 订单列表 / 订单详情 / 地址）不用卡片，
+   分割线与间隔带是它们唯一的分区手段 */
+$hair: $n-200;

@@ -11,15 +11,35 @@ import type {
   CreateOrderPayload,
   CreateOrderResult,
   PaymentChannel,
+  PopupQueue,
+  PopupScene,
   PrepayResult,
   PublicMenu,
   PublicOrder,
   PublicStore,
+  PublicStoreListItem,
 } from '@/types/api';
 
 export function fetchAppConfig(localVersion: number): Promise<AppConfigResponse> {
   const query = localVersion > 0 ? `?v=${localVersion}` : '';
   return request<AppConfigResponse>(`/public/app-config${query}`, { silent: true });
+}
+
+/**
+ * 门店列表（「查看门店」）。
+ *
+ * 后端不收顾客位置，坐标原样下发，**距离与排序在前端算**：
+ * 位置只在小程序这一侧有，把它交给匿名接口既多一次授权也多一条隐私链路。
+ */
+export function fetchStores(params: { merchantId?: number; keyword?: string; limit?: number } = {}): Promise<{ stores: PublicStoreListItem[] }> {
+  const query = [
+    params.merchantId ? `merchantId=${params.merchantId}` : '',
+    params.keyword ? `keyword=${encodeURIComponent(params.keyword)}` : '',
+    params.limit ? `limit=${params.limit}` : '',
+  ]
+    .filter(Boolean)
+    .join('&');
+  return request<{ stores: PublicStoreListItem[] }>(`/public/stores${query ? `?${query}` : ''}`);
 }
 
 export function fetchStore(storeId: number): Promise<PublicStore> {
@@ -76,6 +96,29 @@ export function mockChannelPay(paymentNo: string, channel: string): Promise<unkn
   return request<unknown>('/payments/dev/mock-pay', {
     method: 'POST',
     data: { paymentNo, channel },
+    silent: true,
+  });
+}
+
+/** 当前场景的弹窗队列；后端已按状态 / 时间 / 门店过滤，频次不在这里判 */
+export function fetchPopupQueue(scene: PopupScene, storeId?: number): Promise<PopupQueue> {
+  const query = [`scene=${scene}`, storeId ? `storeId=${storeId}` : ''].filter(Boolean).join('&');
+  return request<PopupQueue>(`/public/popup/list?${query}`, { silent: true });
+}
+
+/**
+ * 弹窗埋点：曝光 / 关闭 / 点击。
+ *
+ * 静默失败 —— 统计绝不能挡住顾客下单，报错了就当没报。
+ */
+export function reportPopupEvent(
+  popupId: number,
+  visitorKey: string,
+  action: 'show' | 'close' | 'click',
+): Promise<unknown> {
+  return request<unknown>('/public/popup/show-log', {
+    method: 'POST',
+    data: { popupId, visitorKey, action },
     silent: true,
   });
 }
