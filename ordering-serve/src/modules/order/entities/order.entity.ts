@@ -1,5 +1,6 @@
 import { Column, Entity, Index, Unique } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
+import { DiningType } from '../../../shared/enums/dining-type.enum';
 import { OrderSource } from '../../../shared/enums/order-source.enum';
 import { OrderStatus } from '../../../shared/enums/order-status.enum';
 import { bigintTransformer } from '../../../shared/utils/transformers';
@@ -25,6 +26,7 @@ import { bigintTransformer } from '../../../shared/utils/transformers';
 @Index('idx_order_merchant', ['merchantId'])
 @Index('idx_order_store', ['storeId'])
 @Index('idx_order_status', ['status'])
+@Index('idx_order_customer', ['customerId'])
 @Unique('uk_order_no', ['orderNo'])
 @Unique('uk_order_merchant_client_token', ['merchantId', 'clientToken'])
 export class Order extends BaseEntity {
@@ -124,6 +126,31 @@ export class Order extends BaseEntity {
   @Column({ name: 'table_no', type: 'varchar', length: 16, nullable: true, comment: '桌号（堂食扫码）' })
   tableNo!: string | null;
 
+  /**
+   * 取餐码（仅门店自提）。
+   *
+   * 存在的理由很具体：让顾客在柜台前报 14 位订单号，店员念一遍、顾客听一遍，
+   * 错一个字符就得回系统里查半天。取餐码是「这家门店当天的第几单」，
+   * 四位数字，喊得出口也对得上，口径见 SerialNoGenerator.nextSeq。
+   * 堂食有桌号、外卖有地址，都不需要它，所以非自提单恒为 NULL。
+   */
+  @Column({
+    name: 'pickup_code',
+    type: 'varchar',
+    length: 8,
+    nullable: true,
+    comment: '取餐码（自提单专用，门店当天序号，如 0042）',
+  })
+  pickupCode!: string | null;
+
+  @Column({
+    name: 'dining_type',
+    type: 'tinyint',
+    default: DiningType.DINE_IN,
+    comment: '就餐方式：0 堂食 / 1 自提 / 2 外卖配送',
+  })
+  diningType!: DiningType;
+
   @Column({ name: 'remark', type: 'varchar', length: 255, nullable: true, comment: '备注，如「不要葱」' })
   remark!: string | null;
 
@@ -144,4 +171,44 @@ export class Order extends BaseEntity {
 
   @Column({ name: 'cancel_reason', type: 'varchar', length: 128, nullable: true, comment: '取消原因' })
   cancelReason!: string | null;
+
+  /**
+   * 下单顾客 ID。
+   *
+   * 可空，且**永远不以它作为读单的凭据**：C 端读单仍是 orderNo + payToken 双因子。
+   * 它存在的意义只有两个 —— 「我的订单」能列出历史单，以及支付成功后知道该给谁加积分。
+   * 未登录顾客下单时它是 NULL，所以历史数据不需要回填。
+   */
+  @Column({
+    name: 'customer_id',
+    type: 'bigint',
+    transformer: bigintTransformer,
+    nullable: true,
+    comment: '下单顾客 ID（登录顾客才有）',
+  })
+  customerId!: number | null;
+
+  @Column({
+    name: 'coupon_id',
+    type: 'bigint',
+    transformer: bigintTransformer,
+    nullable: true,
+    comment: '本单使用的顾客券 ID（customer_coupons.id），未用券为 NULL',
+  })
+  couponId!: number | null;
+
+  /**
+   * 收货地址快照（外卖配送单）。
+   *
+   * 存文本快照而不是 address_id：顾客删掉或改掉地址之后，
+   * 历史订单必须还能看出「当时送到哪儿」，这是履约纠纷里唯一有用的字段。
+   */
+  @Column({
+    name: 'address_snapshot',
+    type: 'varchar',
+    length: 512,
+    nullable: true,
+    comment: '收货信息快照：姓名 / 电话 / 省市区 / 详细地址，下单时定格',
+  })
+  addressSnapshot!: string | null;
 }

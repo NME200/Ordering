@@ -8,7 +8,7 @@ import { Permission } from '../../shared/enums/permission.enum';
 import { Role } from '../../shared/enums/role.enum';
 import { AppConfigService } from './app-config.service';
 import { AppConfigResponseDto } from './dto/app-config-response.dto';
-import { SaveAppConfigDto } from './dto/save-app-config.dto';
+import { RenameAppConfigDto, SaveAppConfigDto } from './dto/save-app-config.dto';
 
 /**
  * 小程序布局配置接口（平台管理端专有）。
@@ -74,10 +74,26 @@ export class AppConfigController {
     return this.appConfigService.publish(id);
   }
 
+  @Put(':id/name')
+  @Permissions(Permission.APP_CONFIG_UPDATE)
+  @ApiOperation({
+    summary: '只改方案名称（三种状态都可以）',
+    description: '内容锁着是锁的，但名字只是标签：一排「未命名方案 / 副本 副本」认不出谁是谁，得能改。',
+  })
+  rename(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: RenameAppConfigDto,
+  ): Promise<AppConfigResponseDto> {
+    return this.appConfigService.rename(id, dto.name);
+  }
+
   @Delete(':id')
   @Permissions(Permission.APP_CONFIG_UPDATE)
-  @ApiOperation({ summary: '删除草稿' })
+  @ApiOperation({
+    summary: '删除方案（草稿与历史版本，软删）',
+    description: '生效中的不可删。历史版本可以删，代价是那一版回滚不到了。',
+  })
   remove(@Param('id', ParseIntPipe) id: number): Promise<void> {
-    return this.appConfigService.removeDraft(id);
+    return this.appConfigService.remove(id);
   }
 }

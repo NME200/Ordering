@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { DataSource, FindOptionsWhere, In, QueryFailedError, Repository } from 'typeorm';
 import { PaginatedDto } from '../../common/dto/paginated.dto';
 import { BusinessException } from '../../common/exceptions/business.exception';
+import { AuthCustomer } from '../../common/interfaces/auth-customer.interface';
 import { AuthUser } from '../../common/interfaces/auth-user.interface';
 import {
   requireMerchantScope,
@@ -12,6 +13,7 @@ import {
 } from '../../common/utils/tenant.util';
 import { BusinessStatus } from '../../shared/enums/business-status.enum';
 import { CommonStatus } from '../../shared/enums/common-status.enum';
+import { DiningType } from '../../shared/enums/dining-type.enum';
 import { DishStatus } from '../../shared/enums/dish-status.enum';
 import { ErrorCode } from '../../shared/enums/error-code.enum';
 import { OrderSource } from '../../shared/enums/order-source.enum';
@@ -31,6 +33,9 @@ import {
 import { PaymentService } from '../payment/payment.service';
 import { Store } from '../store/entities/store.entity';
 import { StoreDishService } from '../store-dish/store-dish.service';
+import { StoreTableService } from '../store/store-table.service';
+import { CouponService } from '../coupon/coupon.service';
+import { CustomerAddress } from '../customer/entities/customer-address.entity';
 import { assertOrderTransition } from './constants/order-status-flow';
 import { MAX_ORDER_PAYABLE_CENT } from './constants/order-limits';
 import { CancelOrderDto } from './dto/cancel-order.dto';
@@ -81,7 +86,17 @@ interface PersistOrderInput {
   customerName: string | null;
   customerPhone: string | null;
   tableNo: string | null;
+  /** 就餐方式：只记录与展示，三种方式价格一致 */
+  diningType: DiningType;
   remark: string | null;
+  /** 下单顾客 ID；游客单与 POS 单为 null */
+  customerId: number | null;
+  /** 本单占用的顾客券 ID */
+  couponId: number | null;
+  /** 优惠金额（分）。由用券流程算出，POS 单恒为 0 */
+  discountAmount: number;
+  /** 收货信息快照（外卖单） */
+  addressSnapshot: string | null;
 }
 
 /** 规格摘要文字上限，与 order_items.spec_summary 列长度保持一致 */
@@ -117,24 +132,33 @@ export class OrderService {
     private readonly specGroupRepository: Repository<SpecGroup>,
     @InjectRepository(SpecOption)
     private readonly specOptionRepository: Repository<SpecOption>,
+    @InjectRepository(CustomerAddress)
+    private readonly addressRepository: Repository<CustomerAddress>,
     private readonly dataSource: DataSource,
     private readonly serialNoGenerator: SerialNoGenerator,
     private readonly merchantService: MerchantService,
     private readonly paymentService: PaymentService,
+    private readonly couponService: CouponService,
     // 门店有效菜单（标准值 + 本店例外）—— 与列表页共用同一处合并口径
     private readonly storeDishService: StoreDishService,
+    // 台位清单：桌号不再由顾客手填，扫码带出来的值要能对上本店在用的台位
+    private readonly storeTableService: StoreTableService,
   ) {}
 
   // ==================== 下单 ====================
 
   /**
-   * 创建订单（C 端扫码点餐，无需登录）。
+   * 创建订单（C 端扫码点餐）。
    *
    * 租户上下文来自 storeId（扫码解析得到），无操作人。
    * 幂等查重必须带商户条件，否则会把他租户的订单返回给当前调用方。
+   *
+   * `customer` 来自 OptionalCustomerGuard：带了有效令牌就归属到账号（能进「我的订单」、
+   * 能用券、能攒积分），没带就是游客单，链路照常走完。
    */
-  async create(dto: CreateOrderDto): Promise<OrderResponseDto> {
+  async create(dto: CreateOrderDto, customer?: AuthCustomer): Promise<OrderResponseDto> {
     const store = await this.resolveOpenStore(dto.storeId);
+    await this.assertTableUsable(store.id, dto.diningType ?? DiningType.DINE_IN, dto.tableNo);
 
     const existing = await this.findByClientToken(dto.clientToken, store.merchantId);
     if (existing) {
@@ -142,21 +166,62 @@ export class OrderService {
     }
 
     const drafts = await this.buildItemDrafts(dto.items, store.merchantId, store.id);
+    const totalAmount = drafts.reduce((sum, draft) => sum + draft.subtotal, 0);
 
-    return this.persistOrder({
-      merchantId: store.merchantId,
-      storeId: store.id,
-      drafts,
-      clientToken: dto.clientToken ?? null,
-      payToken: randomUUID(),
-      source: OrderSource.SCAN,
-      createdBy: null,
-      createdByName: null,
-      customerName: dto.customerName ?? null,
-      customerPhone: dto.customerPhone ?? null,
-      tableNo: dto.tableNo ?? null,
-      remark: dto.remark ?? null,
-    });
+    const addressSnapshot = await this.resolveAddressSnapshot(dto, customer);
+
+    /**
+     * 用券：先锁券再落单。
+     *
+     * 顺序不能反 —— 先落单再锁券的话，两个并发请求都能通过券的可用性检查，
+     * 一张券抵两笔单。锁券失败（已被占用 / 门槛不够）直接报错，此时还没有订单产生。
+     */
+    let couponId: number | null = null;
+    let discountAmount = 0;
+    if (dto.couponId) {
+      if (!customer) {
+        throw BusinessException.badRequest(
+          ErrorCode.COUPON_NOT_USABLE,
+          '登录后才能使用优惠券',
+        );
+      }
+      const locked = await this.couponService.lockForOrder(
+        customer.customerId,
+        store.merchantId,
+        dto.couponId,
+        totalAmount,
+      );
+      couponId = locked.coupon.id;
+      discountAmount = locked.discountAmount;
+    }
+
+    try {
+      return await this.persistOrder({
+        merchantId: store.merchantId,
+        storeId: store.id,
+        drafts,
+        clientToken: dto.clientToken ?? null,
+        payToken: randomUUID(),
+        source: OrderSource.SCAN,
+        createdBy: null,
+        createdByName: null,
+        customerName: dto.customerName ?? null,
+        customerPhone: dto.customerPhone ?? null,
+        tableNo: dto.tableNo ?? null,
+        diningType: dto.diningType ?? DiningType.DINE_IN,
+        remark: dto.remark ?? null,
+        customerId: customer?.customerId ?? null,
+        couponId,
+        discountAmount,
+        addressSnapshot,
+      });
+    } catch (error) {
+      // 单子没落成，券必须还回去，否则顾客白白丢一张券
+      if (couponId !== null) {
+        await this.couponService.releaseById(couponId);
+      }
+      throw error;
+    }
   }
 
   /**
@@ -192,7 +257,13 @@ export class OrderService {
       customerName: dto.customerName ?? null,
       customerPhone: dto.customerPhone ?? null,
       tableNo: dto.tableNo ?? null,
+      diningType: DiningType.DINE_IN,
       remark: dto.remark ?? null,
+      // POS 单是收银员替到店客人开的：没有顾客账号，也不走线上券
+      customerId: null,
+      couponId: null,
+      discountAmount: 0,
+      addressSnapshot: null,
     });
   }
 
@@ -217,9 +288,11 @@ export class OrderService {
       qb.andWhere('order.status = :status', { status: query.status });
     }
     if (query.keyword) {
-      qb.andWhere('(order.orderNo LIKE :keyword OR order.customerPhone LIKE :keyword)', {
-        keyword: `%${query.keyword}%`,
-      });
+      // 取餐码必须能搜：顾客在柜台前报的就是它，店员拿它找不到单，这个号就白发了
+      qb.andWhere(
+        '(order.orderNo LIKE :keyword OR order.customerPhone LIKE :keyword OR order.pickupCode LIKE :keyword)',
+        { keyword: `%${query.keyword}%` },
+      );
     }
     if (query.startTime) {
       qb.andWhere('order.createdAt >= :startTime', { startTime: new Date(query.startTime) });
@@ -358,6 +431,35 @@ export class OrderService {
     order.cancelReason = dto.reason ?? null;
 
     await this.orderRepository.save(order);
+    // 券要跟着退：钱退了、券还锁着，等于顾客白丢一张券
+    await this.couponService.releaseByOrder(order.id);
+    return this.toResponse(order);
+  }
+
+  /**
+   * 顾客取消自己的订单。
+   *
+   * **只允许取消未支付的单**。商户侧 `cancel` 会先退款再落取消，那是有权限的经营者动作；
+   * 顾客自助退款等于把退款变成一个无需审批的公开接口，所以已支付的单一律引导找门店，
+   * 由门店走 `order:cancel` / `payment:refund`。
+   */
+  async cancelByCustomer(id: number, customerId: number): Promise<OrderResponseDto> {
+    const order = await this.orderRepository.findOne({ where: { id, customerId } });
+    if (!order) {
+      throw BusinessException.notFound(ErrorCode.ORDER_NOT_FOUND, '订单不存在');
+    }
+    if (order.status !== OrderStatus.PENDING_PAYMENT) {
+      throw BusinessException.badRequest(
+        ErrorCode.ORDER_STATUS_INVALID,
+        '这一单已经支付或已流转，需要退款请联系门店',
+      );
+    }
+
+    order.status = OrderStatus.CANCELLED;
+    order.cancelledAt = new Date();
+    order.cancelReason = '顾客取消';
+    await this.orderRepository.save(order);
+    await this.couponService.releaseByOrder(order.id);
     return this.toResponse(order);
   }
 
@@ -399,8 +501,7 @@ export class OrderService {
     const { drafts } = input;
     const totalAmount = drafts.reduce((sum, draft) => sum + draft.subtotal, 0);
     const itemCount = drafts.reduce((sum, draft) => sum + draft.quantity, 0);
-    // 优惠体系（优惠券 / 会员折扣）后续接入，当前恒为 0
-    const discountAmount = 0;
+    const discountAmount = input.discountAmount;
     const payableAmount = totalAmount - discountAmount;
 
     /**
@@ -418,6 +519,17 @@ export class OrderService {
         `订单应付金额超出上限（${MAX_ORDER_PAYABLE_CENT / 100} 元），请拆单后下单`,
       );
     }
+
+    /**
+     * 自提单当场发取餐码。
+     *
+     * 只给自提：堂食有桌号、外卖有地址，多一个号只会多一个能念错的口径。
+     * 下单就发、不等接单 —— 顾客付完款就把这一屏当凭证，出餐前改号等于把凭证作废。
+     */
+    const pickupCode =
+      input.diningType === DiningType.PICKUP
+        ? String(await this.serialNoGenerator.nextSeq(`pickup-${input.storeId}`)).padStart(4, '0')
+        : null;
 
     let orderId: number;
     try {
@@ -442,7 +554,12 @@ export class OrderService {
             customerName: input.customerName,
             customerPhone: input.customerPhone,
             tableNo: input.tableNo,
+            pickupCode,
+            diningType: input.diningType,
             remark: input.remark,
+            customerId: input.customerId,
+            couponId: input.couponId,
+            addressSnapshot: input.addressSnapshot,
             paidAt: null,
             acceptedAt: null,
             readyAt: null,
@@ -501,6 +618,11 @@ export class OrderService {
       throw error;
     }
 
+    if (input.couponId !== null) {
+      // 券与订单建立关联：支付成功要按 orderId 核销，取消要按 orderId 退回
+      await this.couponService.attachOrder(input.couponId, orderId);
+    }
+
     const order = await this.orderRepository.findOne({ where: { id: orderId } });
     if (!order) {
       throw BusinessException.notFound(ErrorCode.ORDER_NOT_FOUND, '订单不存在');
@@ -534,6 +656,63 @@ export class OrderService {
       throw BusinessException.badRequest(ErrorCode.ORDER_STORE_CLOSED, '门店已停用，无法开单');
     }
     return store;
+  }
+
+  /**
+   * 外卖单的收货信息快照。
+   *
+   * 只在 `diningType = 外卖配送` 时生效。没传 addressId 时退化成「称呼 + 手机号」，
+   * 那是本轮之前就存在的行为，不能因为加了地址功能就把老客户端的下单堵死。
+   */
+  /**
+   * 堂食单的桌号校验。
+   *
+   * 桌号改成「只能由桌上的二维码带出来」之后，这里就是它唯一的真值来源：
+   * - 为空放行 —— 没扫码照样能下单，由店员现场安排，不为难顾客；
+   * - 非空但对不上（贴错桌、旧码没撕、桌位已撤）就拒 —— 拒的是把餐端到错桌，不是生意。
+   *
+   * 只卡 C 端扫码单：收银台 POS 单的桌号是店员按现场填的，
+   * 拿后台台位去拦店员，只会变成「桌子没录进系统就不给开单」。
+   */
+  private async assertTableUsable(
+    storeId: number,
+    diningType: DiningType,
+    tableNo?: string,
+  ): Promise<void> {
+    const no = (tableNo ?? '').trim();
+    if (diningType !== DiningType.DINE_IN || !no) return;
+    if (await this.storeTableService.isUsable(storeId, no)) return;
+    throw BusinessException.badRequest(
+      ErrorCode.STORE_TABLE_UNUSABLE,
+      `桌面二维码上的桌号「${no}」在本店不存在或已停用，请让店员确认这张码`,
+    );
+  }
+
+  private async resolveAddressSnapshot(
+    dto: CreateOrderDto,
+    customer?: AuthCustomer,
+  ): Promise<string | null> {
+    if (dto.diningType !== DiningType.DELIVERY) {
+      return null;
+    }
+    if (!dto.addressId) {
+      return dto.customerName && dto.customerPhone
+        ? `${dto.customerName} ${dto.customerPhone}`
+        : null;
+    }
+    if (!customer) {
+      throw BusinessException.badRequest(
+        ErrorCode.ADDRESS_NOT_FOUND,
+        '登录后才能使用保存的收货地址',
+      );
+    }
+    const address = await this.addressRepository.findOne({
+      where: { id: dto.addressId, customerId: customer.customerId },
+    });
+    if (!address) {
+      throw BusinessException.notFound(ErrorCode.ADDRESS_NOT_FOUND, '收货地址不存在');
+    }
+    return `${address.receiverName} ${address.phone} ${address.province}${address.city}${address.district}${address.detail}`;
   }
 
   /** 解析门店并校验可下单（门店存在 + 所属商户可用 + 门店启用 + 营业中） */

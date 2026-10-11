@@ -106,6 +106,10 @@ export class StoreService {
       code: dto.code ?? null,
       address: dto.address ?? null,
       phone: dto.phone ?? null,
+      logo: dto.logo ?? null,
+      businessHours: dto.businessHours ?? null,
+      latitude: dto.latitude ?? null,
+      longitude: dto.longitude ?? null,
       businessStatus: dto.businessStatus ?? undefined,
       status: CommonStatus.ENABLED,
     });
@@ -129,6 +133,19 @@ export class StoreService {
     }
     if (dto.phone !== undefined) {
       store.phone = dto.phone;
+    }
+    if (dto.logo !== undefined) {
+      store.logo = dto.logo ?? null;
+    }
+    if (dto.businessHours !== undefined) {
+      store.businessHours = dto.businessHours ?? null;
+    }
+    // 坐标允许清空：null 表示「未录入」，顾客端只是不显示距离，不能当成 0 度
+    if (dto.latitude !== undefined) {
+      store.latitude = dto.latitude ?? null;
+    }
+    if (dto.longitude !== undefined) {
+      store.longitude = dto.longitude ?? null;
     }
     if (dto.businessStatus !== undefined) {
       store.businessStatus = dto.businessStatus;

@@ -84,4 +84,46 @@ export enum Permission {
   APP_CONFIG_READ = 'app-config:read',
   /** 小程序布局配置：修改与发布 */
   APP_CONFIG_UPDATE = 'app-config:update',
+
+  /** 活动弹窗：查看配置与投放数据 */
+  POPUP_READ = 'popup:read',
+  /** 活动弹窗：新建 / 修改 / 下线 */
+  POPUP_UPDATE = 'popup:update',
+
+  /** 顾客账号与会员资产：查看 */
+  CUSTOMER_READ = 'customer:read',
+  /** 顾客账号：封禁 / 解封（涉及顾客能否继续下单，属敏感操作） */
+  CUSTOMER_UPDATE = 'customer:update',
+
+  /** 优惠券模板与发放记录：查看 */
+  COUPON_READ = 'coupon:read',
+  /** 优惠券模板：新建 / 修改 / 上下架 */
+  COUPON_UPDATE = 'coupon:update',
+
+  /** 顾客评价：查看 */
+  REVIEW_READ = 'review:read',
+  /** 顾客评价：商家回复 */
+  REVIEW_UPDATE = 'review:update',
+
+  /** 开票申请：查看 */
+  INVOICE_READ = 'invoice:read',
+  /** 开票申请：受理（受理 / 回填发票号 / 驳回） */
+  INVOICE_UPDATE = 'invoice:update',
+
+  /** 客服会话：查看 */
+  SERVICE_READ = 'service:read',
+  /** 客服会话：以客服身份回复 */
+  SERVICE_UPDATE = 'service:update',
+
+  /** 排队叫号：查看队列 */
+  QUEUE_READ = 'queue:read',
+  /** 排队叫号：门店代客取号 */
+  QUEUE_CREATE = 'queue:create',
+  /** 排队叫号：叫号 / 入座 / 过号 / 清号 */
+  QUEUE_UPDATE = 'queue:update',
+
+  /** 小程序配置（AppID / AppSecret / 扫码规则 / 桌号二维码）：查看 */
+  MINIAPP_READ = 'miniapp:read',
+  /** 小程序配置：修改凭据与扫码规则、生成桌号二维码 */
+  MINIAPP_UPDATE = 'miniapp:update',
 }

@@ -59,6 +59,41 @@ const PLATFORM_ADMIN_PERMISSIONS: Permission[] = [
    */
   Permission.APP_CONFIG_READ,
   Permission.APP_CONFIG_UPDATE,
+
+  /**
+   * 小程序配置（AppID / AppSecret / 扫码规则 / 桌号二维码）。
+   *
+   * AppSecret 能换到调用微信接口的 access_token，等于小程序的身份凭据，
+   * 与支付配置同级：只归平台管理员，**不进可授权白名单**。
+   */
+  Permission.MINIAPP_READ,
+  Permission.MINIAPP_UPDATE,
+
+  /**
+   * 活动弹窗（首页 / 进店 / 支付成功的运营位）。
+   *
+   * 与布局配置同一判断：它直接对全体顾客弹内容、还能带跳转，
+   * 只归平台管理员，**不进可授权白名单**。
+   */
+  Permission.POPUP_READ,
+  Permission.POPUP_UPDATE,
+
+  /**
+   * 顾客账号：平台**独有**的治理对象；营销只有一部分能改。
+   *
+   * 一个顾客账号在平台下所有商户都能下单，会员资产才按商户分档。
+   * 所以「封禁 / 解封」只能由平台做 —— 让商户封一个账号，等于让一家店
+   * 决定这个人在整个平台还能不能消费，那是越权。
+   * 商户例外只有平台券（merchantId 为空、全场通用），改不了任何商户自己的券。
+   */
+  Permission.CUSTOMER_READ,
+  Permission.CUSTOMER_UPDATE,
+  Permission.COUPON_READ,
+  Permission.COUPON_UPDATE,
+  Permission.REVIEW_READ,
+  Permission.INVOICE_READ,
+  Permission.SERVICE_READ,
+  Permission.QUEUE_READ,
 ];
 
 /**
@@ -96,9 +131,30 @@ const MERCHANT_ADMIN_PERMISSIONS: Permission[] = [
   Permission.ORDER_CANCEL,
   Permission.PAYMENT_READ,
   Permission.PAYMENT_REFUND,
+
+  // 营销与售后：商户是这些数据的归属方，读写都归它。
+  // 刻意**不含 customer:***：顾客账号是全平台账号，不是某个商户的资产。
+  // 商户拥有的是「这个人在本店那一套会员档案」（积分 / 余额 / 券），
+  // 那属于 review / invoice / service 这些履约视图，不等于能封别人的账号。
+  Permission.COUPON_READ,
+  Permission.COUPON_UPDATE,
+  Permission.REVIEW_READ,
+  Permission.REVIEW_UPDATE,
+  Permission.INVOICE_READ,
+  Permission.INVOICE_UPDATE,
+  Permission.SERVICE_READ,
+  Permission.SERVICE_UPDATE,
+  Permission.QUEUE_READ,
+  Permission.QUEUE_CREATE,
+  Permission.QUEUE_UPDATE,
 ];
 
-/** 门店管理员：管本店员工、可上下架菜品、处理本店订单（含代客开单）与退款 */
+/**
+ * 门店管理员：管本店员工、可上下架菜品、处理本店订单（含代客开单）与退款。
+ *
+ * 营销与顾客资产**只读**：券是商户级承诺，门店改一张券等于替整个品牌做主；
+ * 但评价回复、开票受理、客服回复、叫号都是本店履约范围内必须当场做完的动作。
+ */
 const STORE_MANAGER_PERMISSIONS: Permission[] = [
   Permission.STORE_READ,
   Permission.USER_READ,
@@ -113,6 +169,17 @@ const STORE_MANAGER_PERMISSIONS: Permission[] = [
   Permission.ORDER_CANCEL,
   Permission.PAYMENT_READ,
   Permission.PAYMENT_REFUND,
+  // 顾客名册不在门店管理员的视野里：封禁与会员归属都不是门店一级的权限
+  Permission.COUPON_READ,
+  Permission.REVIEW_READ,
+  Permission.REVIEW_UPDATE,
+  Permission.INVOICE_READ,
+  Permission.INVOICE_UPDATE,
+  Permission.SERVICE_READ,
+  Permission.SERVICE_UPDATE,
+  Permission.QUEUE_READ,
+  Permission.QUEUE_CREATE,
+  Permission.QUEUE_UPDATE,
 ];
 
 /**
@@ -133,6 +200,10 @@ const CASHIER_PERMISSIONS: Permission[] = [
   Permission.ORDER_READ,
   Permission.ORDER_UPDATE,
   Permission.PAYMENT_READ,
+  // 叫号是前台的活：收银台要替到店顾客取号并推进队列
+  Permission.QUEUE_READ,
+  Permission.QUEUE_CREATE,
+  Permission.QUEUE_UPDATE,
 ];
 
 /**
@@ -164,6 +235,7 @@ export function getPermissionsByRole(role: Role): Permission[] {
  * 授权不是「把 30 个权限点摊开随便勾」—— 有几类必须留在平台管理员手里：
  * - `payment-config:*`：渠道商户号 / 私钥 / 证书属资金级凭据，控制器上还有
  *   `@Roles(PLATFORM_ADMIN)` 硬锁，放进展位只会让勾了却 403 的错觉；
+ * - `miniapp:*`：AppSecret 能换到调用微信接口的 access_token，同上不下放；
  * - `user:create` / `user:delete`：平台账户的新增与删除只归平台管理员；
  *   商家员工本就由商家自行开通与删除，平台端没有这两个动作。
  * - `store:delete`：删店不可逆且直接抹掉商户的履约主体，留在平台管理员手里；
@@ -189,6 +261,15 @@ export const GRANTABLE_PERMISSIONS: Permission[] = [
   Permission.SPEC_READ,
   Permission.ORDER_READ,
   Permission.PAYMENT_READ,
+  // 顾客与售后的只读视图可以切给被授权的运营；写动作（受理开票、回复客服、改券）不行
+  Permission.CUSTOMER_READ,
+  // 封禁顾客与封禁商家账号同类：都是账号治理的止血动作，可以切给被授权的运营
+  Permission.CUSTOMER_UPDATE,
+  Permission.COUPON_READ,
+  Permission.REVIEW_READ,
+  Permission.INVOICE_READ,
+  Permission.SERVICE_READ,
+  Permission.QUEUE_READ,
 ];
 
 /** 判断某权限点能否被授权给运营专员 */

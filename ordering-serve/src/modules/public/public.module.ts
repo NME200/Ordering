@@ -7,6 +7,8 @@ import { Dish } from '../dish/entities/dish.entity';
 import { MerchantModule } from '../merchant/merchant.module';
 import { OrderItem } from '../order/entities/order-item.entity';
 import { Order } from '../order/entities/order.entity';
+import { Payment } from '../payment/entities/payment.entity';
+import { PopupModule } from '../popup/popup.module';
 import { SpecOption } from '../spec-group/entities/spec-option.entity';
 import { SpecGroup } from '../spec-group/entities/spec-group.entity';
 import { Store } from '../store/entities/store.entity';
@@ -32,10 +34,12 @@ import { PublicService } from './public.service';
       SpecOption,
       Order,
       OrderItem,
+      Payment,
     ]),
     StoreDishModule,
     MerchantModule,
     AppConfigModule,
+    PopupModule,
   ],
   controllers: [PublicController],
   providers: [PublicService],

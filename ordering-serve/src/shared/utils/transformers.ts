@@ -12,3 +12,15 @@ export const bigintTransformer: ValueTransformer = {
   from: (value?: string | number | null): number | null | undefined =>
     value === null || value === undefined ? value : Number(value),
 };
+
+/**
+ * DECIMAL 列（如门店经纬度）同样以字符串返回。
+ *
+ * 与 BIGINT 的区别是小数位数：坐标要 7 位小数（约 1 cm 精度），
+ * 用 float 会丢精度，所以列类型留 DECIMAL、出参统一转 number。
+ */
+export const decimalTransformer: ValueTransformer = {
+  to: (value?: number | null): number | null | undefined => value,
+  from: (value?: string | number | null): number | null | undefined =>
+    value === null || value === undefined ? value : Number(value),
+};

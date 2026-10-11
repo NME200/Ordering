@@ -3,11 +3,15 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from '../../common/decorators/public.decorator';
 import { RateLimit } from '../../common/decorators/rate-limit.decorator';
 import { AppConfigService } from '../app-config/app-config.service';
+import { PublicPopupQueue, PopupService } from '../popup/popup.service';
+import { QueryPublicPopupDto, ReportPopupEventDto } from '../popup/dto/public-popup.dto';
 import { QueryAppConfigDto } from './dto/query-app-config.dto';
 import { CancelPublicOrderDto } from './dto/cancel-public-order.dto';
 import { QueryPublicOrderDto } from './dto/query-public-order.dto';
+import { QueryPublicStoresDto } from './dto/query-public-stores.dto';
 import { PublicMenuResponseDto } from './dto/public-menu-response.dto';
 import { PublicOrderResponseDto } from './dto/public-order-response.dto';
+import { PublicStoreListResponseDto } from './dto/public-store-list-response.dto';
 import { PublicStoreResponseDto } from './dto/public-store-response.dto';
 import { PublicService } from './public.service';
 
@@ -26,18 +30,58 @@ export class PublicController {
   constructor(
     private readonly publicService: PublicService,
     private readonly appConfigService: AppConfigService,
+    private readonly popupService: PopupService,
   ) {}
 
   @Get('app-config')
   @RateLimit({ bucket: 'public-app-config', limit: 30, windowSeconds: 60 })
   @ApiOperation({
-    summary: '小程序布局配置（无需登录）',
+    summary: '小程序布局配置（无需登录，一次给全四页）',
     description:
-      '返回当前生效的首页组件与主题 token；没发布过时回落到内置默认，' +
-      '小程序首启不会白屏。带 `?v=本地版本` 命中时只回 `{ unchanged: true }`。',
+      '返回主题 token 与首页 / 个人中心 / 会员卡 / 优惠券中心四页的组件列表。' +
+      '刻意不按 pageKey 拆成四个接口：顾客小程序启动时一次性缓存整份皮肤，' +
+      '拆开会把这个限流桶一次消耗四次，还会让四页版本号各走各的。' +
+      '没发布过时回落到内置默认，小程序首启不会白屏；' +
+      '带 `?v=本地版本` 命中时只回 `{ unchanged: true }`。',
   })
   appConfig(@Query() query: QueryAppConfigDto): Promise<Record<string, unknown>> {
     return this.appConfigService.resolveForClient(query.v);
+  }
+
+  @Get('popup/list')
+  @RateLimit({ bucket: 'public-popup', limit: 60, windowSeconds: 60 })
+  @ApiOperation({
+    summary: '当前场景的活动弹窗队列（无需登录）',
+    description:
+      '后端只按状态 / 生效时间 / 场景 / 门店过滤，**频次不在这里判**：' +
+      '匿名接口认不得「这个人」，小程序本地按 popupId + 日期拦截，show-log 再回写一条留痕。' +
+      '队列行为（queue / top_only、最多弹几个）由优先级最高的那条决定。',
+  })
+  popupList(@Query() query: QueryPublicPopupDto): Promise<PublicPopupQueue> {
+    return this.popupService.resolveForClient(query);
+  }
+
+  @Post('popup/show-log')
+  @RateLimit({ bucket: 'public-popup-report', limit: 120, windowSeconds: 60 })
+  @ApiOperation({
+    summary: '上报弹窗曝光 / 关闭 / 点击',
+    description: '同一 (弹窗, 访客, 日期) 落同一行：曝光累加次数，关闭与点击只置位。',
+  })
+  popupReport(@Body() dto: ReportPopupEventDto): Promise<void> {
+    return this.popupService.report(dto);
+  }
+
+  @Get('stores')
+  @RateLimit({ bucket: 'public-store-list', limit: 60, windowSeconds: 60 })
+  @ApiOperation({
+    summary: '门店列表（无需登录，跨商户）',
+    description:
+      '「查看门店」用。只返回启用中的门店且所属商户可用，不可用的直接不出现。' +
+      '每店带经纬度与近 30 天月售，**距离与按距离排序在前端做**（接口不索要顾客位置）。' +
+      '设计稿里的评分与起送价没有下发：后端没有评价表与配送费模型，不摆假数。',
+  })
+  stores(@Query() query: QueryPublicStoresDto): Promise<PublicStoreListResponseDto> {
+    return this.publicService.findStores(query);
   }
 
   @Get('stores/:storeId')

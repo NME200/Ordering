@@ -1,0 +1,42 @@
+import { Column, Entity, Index, Unique } from 'typeorm';
+import { BaseEntity } from '../../../common/entities/base.entity';
+import { PointReason } from '../../../shared/enums/customer.enum';
+import { bigintTransformer } from '../../../shared/utils/transformers';
+
+/**
+ * 积分 / 成长值流水。
+ *
+ * 两个用途：
+ * 1. **幂等**：`(orderId, reason)` 上有唯一索引。支付回调会重复到达、
+ *    评价接口会被连点，没有这道约束同一笔订单能加两次积分；
+ *    MySQL 唯一索引允许多个 NULL，所以人工调整（无订单）不受影响。
+ * 2. **对账**：顾客问「我的积分怎么少了 50」时，这是唯一能回答问题的东西。
+ */
+@Entity('point_logs')
+@Unique('uk_point_order_reason', ['orderId', 'reason'])
+@Index('idx_point_customer_merchant', ['customerId', 'merchantId'])
+export class PointLog extends BaseEntity {
+  @Column({ name: 'customer_id', type: 'bigint', transformer: bigintTransformer, comment: '顾客 ID' })
+  customerId!: number;
+
+  @Column({ name: 'merchant_id', type: 'bigint', transformer: bigintTransformer, comment: '商户 ID' })
+  merchantId!: number;
+
+  @Column({ name: 'point_change', type: 'int', default: 0, comment: '积分变动（正数增加，负数扣减）' })
+  pointChange!: number;
+
+  @Column({ name: 'growth_change', type: 'int', default: 0, comment: '成长值变动' })
+  growthChange!: number;
+
+  @Column({ name: 'point_after', type: 'int', default: 0, comment: '变动后的积分余额快照' })
+  pointAfter!: number;
+
+  @Column({ type: 'varchar', length: 16, comment: '变动原因：order / refund / review / manual' })
+  reason!: PointReason;
+
+  @Column({ name: 'order_id', type: 'bigint', transformer: bigintTransformer, nullable: true, comment: '关联订单 ID' })
+  orderId!: number | null;
+
+  @Column({ type: 'varchar', length: 128, nullable: true, comment: '说明文案，直接给顾客看' })
+  remark!: string | null;
+}

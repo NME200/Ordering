@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { DINING_TYPE_LABELS, DiningType } from '../../../shared/enums/dining-type.enum';
 import { ORDER_SOURCE_LABELS, OrderSource } from '../../../shared/enums/order-source.enum';
 import { ORDER_STATUS_LABELS, OrderStatus } from '../../../shared/enums/order-status.enum';
 import { OrderItemSpec } from '../entities/order-item-spec.entity';
@@ -137,6 +138,19 @@ export class OrderResponseDto {
   @ApiProperty({ description: '桌号', nullable: true })
   tableNo!: string | null;
 
+  @ApiProperty({
+    description: '取餐码（仅自提单，门店当天序号）。店员在柜台前喊的就是它，别拿订单号代替',
+    nullable: true,
+    example: '0042',
+  })
+  pickupCode!: string | null;
+
+  @ApiProperty({ description: '就餐方式：0 堂食 / 1 自提 / 2 外卖配送', enum: DiningType })
+  diningType!: DiningType;
+
+  @ApiProperty({ description: '就餐方式名称', example: '堂食' })
+  diningTypeLabel!: string;
+
   @ApiProperty({ description: '备注', nullable: true })
   remark!: string | null;
 
@@ -196,6 +210,9 @@ export class OrderResponseDto {
     dto.customerName = entity.customerName;
     dto.customerPhone = entity.customerPhone;
     dto.tableNo = entity.tableNo;
+    dto.pickupCode = entity.pickupCode;
+    dto.diningType = entity.diningType;
+    dto.diningTypeLabel = DINING_TYPE_LABELS[entity.diningType];
     dto.remark = entity.remark;
     dto.paidAt = entity.paidAt;
     dto.acceptedAt = entity.acceptedAt;

@@ -19,6 +19,15 @@ export const RedisKeys = {
    */
   rateLimit: (bucket: string, ip: string, windowIndex: number) =>
     `${REDIS_KEY_PREFIX}:ratelimit:${bucket}:${ip}:${windowIndex}`,
+  /**
+   * 顾客手机验证码。
+   *
+   * 键里带手机号，所以同一号码重复申请会覆盖旧码 —— 这是想要的行为：
+   * 老验证码立即失效，避免被人拿历史码撞。
+   */
+  smsCode: (phone: string) => `${REDIS_KEY_PREFIX}:sms:code:${phone}`,
+  /** 验证码发送间隔锁：存在即拒绝再次发送 */
+  smsInterval: (phone: string) => `${REDIS_KEY_PREFIX}:sms:interval:${phone}`,
 };
 
 /** 租户可用性相关 Redis key 生成器 */

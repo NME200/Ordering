@@ -18,9 +18,18 @@ import { AuthUser } from '../../common/interfaces/auth-user.interface';
 import { Permission } from '../../shared/enums/permission.enum';
 import { CreateStoreDto } from './dto/create-store.dto';
 import { QueryStoreDto } from './dto/query-store.dto';
+import {
+  GenerateTableQrcodeAllDto,
+  GenerateTableQrcodeDto,
+  TableQrcodeImageDto,
+  TableQrcodeRowDto,
+} from './dto/store-table-qrcode.dto';
+import { StoreTableResponseDto, UpsertStoreTableDto } from './dto/store-table.dto';
 import { StoreResponseDto } from './dto/store-response.dto';
 import { UpdateStoreStatusDto } from './dto/update-store-status.dto';
 import { UpdateStoreDto } from './dto/update-store.dto';
+import { StoreTableQrcodeService } from './store-table-qrcode.service';
+import { StoreTableService } from './store-table.service';
 import { StoreService } from './store.service';
 
 /**
@@ -32,7 +41,11 @@ import { StoreService } from './store.service';
 @ApiBearerAuth()
 @Controller('stores')
 export class StoreController {
-  constructor(private readonly storeService: StoreService) {}
+  constructor(
+    private readonly storeService: StoreService,
+    private readonly storeTableService: StoreTableService,
+    private readonly storeTableQrcodeService: StoreTableQrcodeService,
+  ) {}
 
   @Get()
   @Permissions(Permission.STORE_READ)
@@ -110,5 +123,93 @@ export class StoreController {
     @CurrentUser() currentUser: AuthUser,
   ): Promise<void> {
     return this.storeService.remove(id, currentUser);
+  }
+
+  // ==================== 台位（桌号） ====================
+  // 桌号只能由桌上的二维码带进小程序，所以它得在这里被维护成一份可校验的清单。
+  // 写权限沿用 store:update：台位属门店资料，店长拿不到（与改门店名同级）。
+
+  @Get(':id/tables')
+  @Permissions(Permission.STORE_READ)
+  @ApiOperation({ summary: '门店台位列表' })
+  listTables(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() currentUser: AuthUser,
+  ): Promise<StoreTableResponseDto[]> {
+    return this.storeTableService.list(id, currentUser);
+  }
+
+  @Post(':id/tables')
+  @Permissions(Permission.STORE_UPDATE)
+  @ApiOperation({ summary: '新增台位' })
+  createTable(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpsertStoreTableDto,
+    @CurrentUser() currentUser: AuthUser,
+  ): Promise<StoreTableResponseDto> {
+    return this.storeTableService.create(id, dto, currentUser);
+  }
+
+  @Put(':id/tables/:tableId')
+  @Permissions(Permission.STORE_UPDATE)
+  @ApiOperation({ summary: '编辑台位（桌号 / 区域 / 启停 / 排序）' })
+  updateTable(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('tableId', ParseIntPipe) tableId: number,
+    @Body() dto: UpsertStoreTableDto,
+    @CurrentUser() currentUser: AuthUser,
+  ): Promise<StoreTableResponseDto> {
+    return this.storeTableService.update(tableId, dto, currentUser);
+  }
+
+  @Delete(':id/tables/:tableId')
+  @Permissions(Permission.STORE_UPDATE)
+  @ApiOperation({ summary: '删除台位（软删除，桌号之后可复用）' })
+  removeTable(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('tableId', ParseIntPipe) tableId: number,
+    @CurrentUser() currentUser: AuthUser,
+  ): Promise<{ id: number }> {
+    return this.storeTableService.remove(tableId, currentUser);
+  }
+
+  // ==================== 桌码 ====================
+  // 商家自己给自己门店的台位出码；用的凭据是平台那一份（系统设置 → 小程序配置）。
+
+  @Get(':id/table-qrcodes')
+  @Permissions(Permission.STORE_READ)
+  @ApiOperation({ summary: '本店已生成的桌码列表（不含图片）' })
+  listTableQrcodes(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() currentUser: AuthUser,
+  ): Promise<TableQrcodeRowDto[]> {
+    return this.storeTableQrcodeService.list(id, currentUser);
+  }
+
+  @Post(':id/table-qrcodes/generate')
+  @Permissions(Permission.STORE_UPDATE)
+  @ApiOperation({
+    summary: '生成单张桌码',
+    description: '桌号必须是本店启用中的台位；已生成过的直接覆盖重生成。',
+  })
+  generateTableQrcode(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: GenerateTableQrcodeDto,
+    @CurrentUser() currentUser: AuthUser,
+  ): Promise<TableQrcodeImageDto> {
+    return this.storeTableQrcodeService.generate(id, dto.tableNo, currentUser);
+  }
+
+  @Post(':id/table-qrcodes/generate-all')
+  @Permissions(Permission.STORE_UPDATE)
+  @ApiOperation({
+    summary: '批量生成本店台位码',
+    description: '单张失败不中断整批，失败原因逐条回给界面。',
+  })
+  generateAllTableQrcodes(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() currentUser: AuthUser,
+  ): Promise<GenerateTableQrcodeAllDto> {
+    return this.storeTableQrcodeService.generateAll(id, currentUser);
   }
 }

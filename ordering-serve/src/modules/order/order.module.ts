@@ -1,11 +1,16 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { CouponModule } from '../coupon/coupon.module';
+import { CustomerAddress } from '../customer/entities/customer-address.entity';
+import { CustomerAuthModule } from '../customer/customer-auth.module';
+import { CustomerOrderController } from './customer-order.controller';
 import { DishSpecGroup } from '../dish/entities/dish-spec-group.entity';
 import { Dish } from '../dish/entities/dish.entity';
 import { SpecGroup } from '../spec-group/entities/spec-group.entity';
 import { SpecOption } from '../spec-group/entities/spec-option.entity';
 import { Store } from '../store/entities/store.entity';
 import { StoreDishModule } from '../store-dish/store-dish.module';
+import { StoreModule } from '../store/store.module';
 import { MerchantModule } from '../merchant/merchant.module';
 import { PaymentModule } from '../payment/payment.module';
 import { OrderItemSpec } from './entities/order-item-spec.entity';
@@ -35,12 +40,17 @@ import { OrderService } from './order.service';
       DishSpecGroup,
       SpecGroup,
       SpecOption,
+      CustomerAddress,
     ]),
     MerchantModule,
     PaymentModule,
     StoreDishModule,
+    // 台位清单：堂食单的桌号要能对上本店在用的台位（见 OrderService.assertTableUsable）
+    StoreModule,
+    CouponModule,
+    CustomerAuthModule,
   ],
-  controllers: [OrderController],
+  controllers: [OrderController, CustomerOrderController],
   providers: [OrderService],
   exports: [OrderService],
 })

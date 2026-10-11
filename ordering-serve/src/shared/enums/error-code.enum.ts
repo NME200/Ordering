@@ -61,6 +61,10 @@ export enum ErrorCode {
   STORE_NAME_EXISTS = 40002,
   /** 门店下仍有订单，不能删除 */
   STORE_IN_USE = 40003,
+  /** 该桌号在本店已存在（软删后允许复用，所以只在服务层判重） */
+  STORE_TABLE_EXISTS = 40004,
+  /** 桌号在本店不存在或已停用：扫码带出来的桌号要能对上后台维护的台位 */
+  STORE_TABLE_UNUSABLE = 40005,
 
   // ---------- 5xxxx 菜品分类 ----------
   /** 菜品分类不存在 */
@@ -137,4 +141,80 @@ export enum ErrorCode {
   PAYMENT_CONFIG_FIELD_INVALID = 90009,
   /** 缺少敏感配置主密钥，或密文无法解密（主密钥被更换过） */
   PAYMENT_CONFIG_KEY_UNAVAILABLE = 90010,
+
+  // ---------- 10xxxx 顾客账号 ----------
+  /** 顾客账号不存在 */
+  CUSTOMER_NOT_FOUND = 100001,
+  /** 登录令牌不合法或已失效 */
+  CUSTOMER_TOKEN_INVALID = 100002,
+  /** 手机号已被其他账号绑定 */
+  CUSTOMER_PHONE_EXISTS = 100003,
+  /** 短信验证码错误或已过期 */
+  CUSTOMER_CODE_INVALID = 100004,
+  /** 验证码获取过于频繁 */
+  CUSTOMER_CODE_TOO_MANY = 100005,
+  /** 收货地址不存在或不属于当前顾客 */
+  ADDRESS_NOT_FOUND = 100006,
+  /** 收货地址数量超限 */
+  ADDRESS_LIMIT = 100007,
+  /** 微信侧登录 / 手机号组件失败（凭据缺失、code 失效、额度用完、用户取消） */
+  CUSTOMER_WECHAT_FAILED = 100008,
+
+  // ---------- 11xxxx 优惠券 ----------
+  /** 券模板不存在 */
+  COUPON_TEMPLATE_NOT_FOUND = 110001,
+  /** 券已领完 / 库存不足 */
+  COUPON_SOLD_OUT = 110002,
+  /** 已超过每人限领数量 */
+  COUPON_LIMIT_EXCEEDED = 110003,
+  /** 该券不属于领券中心（新客券 / 生日券由服务端发放） */
+  COUPON_NOT_RECEIVABLE = 110004,
+  /** 顾客持有的券不存在或不属于本人 */
+  CUSTOMER_COUPON_NOT_FOUND = 110005,
+  /** 券当前状态不可用（已使用 / 已过期 / 被别的订单占用） */
+  COUPON_NOT_USABLE = 110006,
+  /** 订单金额未达到券的使用门槛 */
+  COUPON_THRESHOLD_NOT_MET = 110007,
+  /** 券不适用于当前商户（平台券除外） */
+  COUPON_MERCHANT_MISMATCH = 110008,
+
+  // ---------- 12xxxx 会员与积分 ----------
+  /** 生日信息已登记，不能重复修改用于领生日券 */
+  MEMBER_BIRTHDAY_LOCKED = 120001,
+  /** 积分余额不足 */
+  POINT_NOT_ENOUGH = 120002,
+
+  // ---------- 13xxxx 评价 ----------
+  /** 订单不存在或不属于当前顾客，无法评价 */
+  REVIEW_ORDER_INVALID = 130001,
+  /** 该订单已评价过 */
+  REVIEW_ALREADY_EXISTS = 130002,
+  /** 评价不存在 */
+  REVIEW_NOT_FOUND = 130003,
+
+  // ---------- 14xxxx 发票 ----------
+  /** 发票抬头不存在 */
+  INVOICE_TITLE_NOT_FOUND = 140001,
+  /** 开票申请不存在 */
+  INVOICE_NOT_FOUND = 140002,
+  /** 该订单不可开票（未完成、超窗口期或已申请过） */
+  INVOICE_ORDER_INVALID = 140003,
+
+  // ---------- 15xxxx 在线客服 ----------
+  /** 会话不存在或不属于当前账号 */
+  SERVICE_SESSION_NOT_FOUND = 150001,
+
+  // ---------- 16xxxx 排队叫号 ----------
+  /** 排队记录不存在 */
+  QUEUE_NOT_FOUND = 160001,
+  /** 当前状态不允许该操作 */
+  QUEUE_STATUS_INVALID = 160002,
+  /** 已有进行中的排队，请先取消 */
+  QUEUE_ALREADY_ACTIVE = 160003,
+
+  // ---------- 17xxxx 小程序配置 ----------
+  /** 小程序凭据未配齐：AppID / AppSecret 缺一项就没法调微信接口 */
+  MINIAPP_CONFIG_INCOMPLETE = 170001,
+  /** 微信接口调用失败：把对方的 errcode + errmsg 原样带回，别让运营猜 */
+  MINIAPP_WECHAT_API_FAILED = 170002,
 }

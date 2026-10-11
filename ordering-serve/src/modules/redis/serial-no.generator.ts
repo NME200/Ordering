@@ -32,15 +32,31 @@ export class SerialNoGenerator {
    * @param prefix 业务前缀，如 `O`（订单）、`P`（支付）、`R`（退款）
    */
   async next(prefix: string): Promise<string> {
-    const now = new Date();
-    const ymd = `${now.getFullYear()}${pad2(now.getMonth() + 1)}${pad2(now.getDate())}`;
-    const key = RedisKeys.serialSeq(prefix, ymd);
-
-    const seq = await this.redis.incr(key);
-    if (seq === 1) {
-      await this.redis.expire(key, SEQ_TTL_SECONDS);
-    }
-
-    return `${prefix}${ymd}${String(seq).padStart(SEQ_PAD_LENGTH, '0')}`;
+    const seq = await this.nextSeq(prefix);
+    return `${prefix}${todayYmd()}${String(seq).padStart(SEQ_PAD_LENGTH, '0')}`;
   }
+
+  /**
+   * 当天第几号，只回数字。
+   *
+   * 给「店员要念得出口」的短号用 —— 门店自提的取餐码就是它，`scope` 决定计数粒度：
+   * `pickup-<storeId>` 表示「这家门店当天的第几单」。
+   * 拿 `O20261011000042` 在柜台前报号是没法用的，所以才单独开这一条。
+   *
+   * ⚠️ 计数在 Redis：Redis 被清空后当天会从头再数，理论上可能撞号。
+   * 撞号只是两个顾客同号，店员按下单时间与订单号仍能分开，所以没有加库级唯一约束。
+   */
+  async nextSeq(scope: string): Promise<number> {
+    const ymd = todayYmd();
+    const seq = await this.redis.incr(RedisKeys.serialSeq(scope, ymd));
+    if (seq === 1) {
+      await this.redis.expire(RedisKeys.serialSeq(scope, ymd), SEQ_TTL_SECONDS);
+    }
+    return seq;
+  }
+}
+
+function todayYmd(): string {
+  const now = new Date();
+  return `${now.getFullYear()}${pad2(now.getMonth() + 1)}${pad2(now.getDate())}`;
 }

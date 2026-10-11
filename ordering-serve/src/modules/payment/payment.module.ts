@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DevOnlyGuard } from '../../common/guards/dev-only.guard';
+import { CouponModule } from '../coupon/coupon.module';
+import { CustomerModule } from '../customer/customer.module';
 import { PaymentConfig } from '../payment-config/entities/payment-config.entity';
 import { Order } from '../order/entities/order.entity';
 import { Payment } from './entities/payment.entity';
@@ -17,10 +19,16 @@ import { PaymentProviderRegistry } from './providers/payment-provider.registry';
  * PaymentConfigModule 需要 PaymentProviderRegistry 做「配置改完热生效」。
  * 订单状态流转的合法性由 order-status-flow 的纯函数保证，不依赖 OrderService。
  *
- * 渠道实现不再是模块级 provider：它们由 PaymentProviderFactory 按数据库配置实例化。
+ * 引入 CustomerModule / CouponModule 是为了「支付成功后累计积分、把券转成已核销」：
+ * 这两件事必须挂在**支付**这个事实上，挂在下单上会让未付款的订单也拿到积分。
+ * 依赖方向是 支付 → 顾客 → 优惠券，没有任何一环反向指回支付，不会成环。
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([Payment, Order, PaymentConfig])],
+  imports: [
+    TypeOrmModule.forFeature([Payment, Order, PaymentConfig]),
+    CustomerModule,
+    CouponModule,
+  ],
   controllers: [PaymentController],
   providers: [PaymentService, PaymentProviderRegistry, DevOnlyGuard],
   exports: [PaymentService, PaymentProviderRegistry],

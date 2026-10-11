@@ -20,6 +20,8 @@ import {
 } from '../../shared/enums/payment-status.enum';
 import { RefundStatus } from '../../shared/enums/refund-status.enum';
 import { Order } from '../order/entities/order.entity';
+import { CouponService } from '../coupon/coupon.service';
+import { MemberService } from '../customer/member.service';
 import { SerialNoGenerator } from '../redis/serial-no.generator';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import {
@@ -60,6 +62,8 @@ export class PaymentService {
     private readonly dataSource: DataSource,
     private readonly registry: PaymentProviderRegistry,
     private readonly serialNoGenerator: SerialNoGenerator,
+    private readonly memberService: MemberService,
+    private readonly couponService: CouponService,
   ) {}
 
   // ==================== 渠道信息 ====================
@@ -83,13 +87,39 @@ export class PaymentService {
    * 同一订单在同一渠道下已有待支付单时直接复用，避免用户反复点击生成一堆支付单。
    */
   async createPayment(orderId: number, dto: CreatePaymentDto): Promise<PrepayResponseDto> {
-    const channel = dto.channel ?? PaymentChannel.MOCK;
-    const provider = this.registry.get(channel);
-
     const order = await this.orderRepository.findOne({ where: { id: orderId } });
     if (!order?.payToken || !safeCompare(order.payToken, dto.payToken)) {
       throw BusinessException.notFound(ErrorCode.ORDER_NOT_FOUND, '订单不存在');
     }
+    return this.startPayment(order, dto.channel ?? PaymentChannel.MOCK, dto.openId);
+  }
+
+  /**
+   * 已登录顾客为自己的订单发起支付。
+   *
+   * payToken 是一次性票据，只在下单响应里出现一次，**换设备或清过缓存的顾客手里没有它**，
+   * 于是那笔没付的单子就永远付不了。这条路径改用 `orders.customer_id` 与令牌里的顾客 ID
+   * 相等来证明归属 —— 强度不低于双因子，且完全不给未登录者开口子。
+   */
+  async createPaymentForOwner(
+    orderId: number,
+    customerId: number,
+    channel: PaymentChannel,
+  ): Promise<PrepayResponseDto> {
+    const order = await this.orderRepository.findOne({ where: { id: orderId, customerId } });
+    if (!order) {
+      throw BusinessException.notFound(ErrorCode.ORDER_NOT_FOUND, '订单不存在');
+    }
+    return this.startPayment(order, channel);
+  }
+
+  /** 归属确认之后共用的下单流程 */
+  private async startPayment(
+    order: Order,
+    channel: PaymentChannel,
+    openId?: string,
+  ): Promise<PrepayResponseDto> {
+    const provider = this.registry.get(channel);
     this.assertPayable(order);
 
     let payment = await this.paymentRepository.findOne({
@@ -128,7 +158,7 @@ export class PaymentService {
         orderNo: order.orderNo,
         amount: payment.amount,
         description: `订单 ${order.orderNo}`,
-        openId: dto.openId,
+        openId,
       });
 
       payment.prepayId = prepay.prepayId;
@@ -188,6 +218,7 @@ export class PaymentService {
     }
 
     let orderAlreadyClosed = false;
+    let paidOrderId: number | null = null;
 
     await this.dataSource.transaction(async (manager) => {
       payment.status = PaymentStatus.SUCCESS;
@@ -211,6 +242,11 @@ export class PaymentService {
       order.paidAt = payment.paidAt;
       order.paidAmount = payment.amount;
       await orderRepository.save(order);
+
+      // 积分与成长值必须在同一个事务里累计：
+      // 订单已支付但积分没到账，顾客会来问；反过来积分到账而订单回滚，就是白送。
+      await this.memberService.accrueForPaidOrder(order, manager);
+      paidOrderId = order.id;
     });
 
     if (orderAlreadyClosed) {
@@ -219,6 +255,10 @@ export class PaymentService {
       );
       await this.refundPaymentRecord(payment, '订单已取消，支付成功后自动退款');
       return PaymentResponseDto.from(payment);
+    }
+
+    if (paidOrderId !== null) {
+      await this.couponService.markUsedByOrder(paidOrderId);
     }
 
     this.logger.log(`支付成功：${payment.paymentNo}，订单 ${payment.orderNo}`);
@@ -263,7 +303,7 @@ export class PaymentService {
     const order = await this.findOrderOrFail(orderId, currentUser);
     this.assertPayable(order);
 
-    return this.dataSource.transaction(async (manager) => {
+    const result = await this.dataSource.transaction(async (manager) => {
       const payment = await manager.getRepository(Payment).save(
         manager.getRepository(Payment).create({
           paymentNo: await this.serialNoGenerator.next(PAYMENT_NO_PREFIX),
@@ -292,10 +332,14 @@ export class PaymentService {
       order.paidAt = payment.paidAt;
       order.paidAmount = payment.amount;
       await manager.getRepository(Order).save(order);
+      await this.memberService.accrueForPaidOrder(order, manager);
 
       this.logger.log(`线下收款成功：${payment.paymentNo}，订单 ${payment.orderNo}`);
       return PaymentResponseDto.from(payment);
     });
+
+    await this.couponService.markUsedByOrder(order.id);
+    return result;
   }
 
   // ==================== 退款 ====================
@@ -523,6 +567,14 @@ export class PaymentService {
       payment.refundAmount = payment.amount;
       payment.refundedAt = new Date();
       payment.refundTransactionId = result.refundTransactionId;
+
+      // 退款成功要扣回这一单发的积分与成长值（幂等由 point_logs 唯一索引保证）
+      const refundedOrder = await this.orderRepository.findOne({
+        where: { id: payment.orderId },
+      });
+      if (refundedOrder) {
+        await this.memberService.reverseForRefund(refundedOrder);
+      }
     } else {
       await this.paymentRepository.update(
         { id: payment.id, refundStatus: RefundStatus.PENDING, refundNo },

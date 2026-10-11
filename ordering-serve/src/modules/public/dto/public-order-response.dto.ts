@@ -1,4 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
+import {
+  DINING_TYPE_LABELS,
+  DiningType,
+} from '../../../shared/enums/dining-type.enum';
 import { OrderStatus, ORDER_STATUS_LABELS } from '../../../shared/enums/order-status.enum';
 import { OrderItem } from '../../order/entities/order-item.entity';
 import { Order } from '../../order/entities/order.entity';
@@ -10,6 +14,15 @@ export class PublicOrderItemDto {
 
   @ApiProperty({ description: '规格摘要', example: '大杯 / 加珍珠' })
   specSummary!: string;
+
+  /**
+   * 菜品图（下单时快照）。
+   *
+   * 订单详情的商品行要画图，而菜单可能已经下架或换图 —— 只有快照能对上当时那一单。
+   * 商户侧的「我的订单」早就回这个字段，两条读路径的界面才能画得一样。
+   */
+  @ApiProperty({ description: '菜品图（快照）；未录入为 null', nullable: true })
+  dishImageUrl!: string | null;
 
   @ApiProperty({ description: '单价（分，快照）', example: 3800 })
   unitPrice!: number;
@@ -43,8 +56,27 @@ export class PublicOrderResponseDto {
   @ApiProperty({ description: '桌号', nullable: true })
   tableNo!: string | null;
 
+  @ApiProperty({
+    description: '取餐码（仅自提单，门店当天序号）',
+    nullable: true,
+    example: '0042',
+  })
+  pickupCode!: string | null;
+
+  @ApiProperty({ description: '就餐方式：0 堂食 / 1 自提 / 2 外卖配送', enum: DiningType })
+  diningType!: DiningType;
+
+  @ApiProperty({ description: '就餐方式名称', example: '堂食' })
+  diningTypeLabel!: string;
+
   @ApiProperty({ description: '商品总件数', example: 3 })
   itemCount!: number;
+
+  @ApiProperty({ description: '商品总额（分），费用明细第一行', example: 8000 })
+  totalAmount!: number;
+
+  @ApiProperty({ description: '优惠金额（分），未用券为 0', example: 400 })
+  discountAmount!: number;
 
   @ApiProperty({ description: '应付金额（分）', example: 7600 })
   payableAmount!: number;
@@ -73,6 +105,15 @@ export class PublicOrderResponseDto {
   @ApiProperty({ description: '明细', type: [PublicOrderItemDto] })
   items!: PublicOrderItemDto[];
 
+  /**
+   * 支付方式文案（如「模拟支付」「线下收款」）；未支付为 null。
+   *
+   * 由 PublicService 查成功支付单后回填 —— 订单表不存渠道，
+   * 而设计稿 §8 的「订单信息」里这一行要回答「我到底用什么付的」。
+   */
+  @ApiProperty({ description: '支付方式；未支付为 null', nullable: true })
+  paidChannelLabel: string | null = null;
+
   static from(order: Order, items: OrderItem[], storeName: string): PublicOrderResponseDto {
     const dto = new PublicOrderResponseDto();
     dto.orderNo = order.orderNo;
@@ -80,7 +121,12 @@ export class PublicOrderResponseDto {
     dto.status = order.status;
     dto.statusLabel = ORDER_STATUS_LABELS[order.status];
     dto.tableNo = order.tableNo;
+    dto.pickupCode = order.pickupCode;
+    dto.diningType = order.diningType;
+    dto.diningTypeLabel = DINING_TYPE_LABELS[order.diningType];
     dto.itemCount = order.itemCount;
+    dto.totalAmount = order.totalAmount;
+    dto.discountAmount = order.discountAmount;
     dto.payableAmount = order.payableAmount;
     dto.paidAmount = order.paidAmount;
     dto.remark = order.remark;
@@ -93,6 +139,7 @@ export class PublicOrderResponseDto {
       const line = new PublicOrderItemDto();
       line.dishName = item.dishName;
       line.specSummary = item.specSummary;
+      line.dishImageUrl = item.dishImageUrl;
       line.unitPrice = item.unitPrice;
       line.quantity = item.quantity;
       line.subtotal = item.subtotal;

@@ -61,6 +61,15 @@ export class PublicMenuDishDto {
   @ApiProperty({ description: '本店是否已沽清（今日售罄）', example: false })
   soldOut!: boolean;
 
+  /**
+   * 近 30 天本店已完成订单的销量（份数）。
+   *
+   * 只有已完成订单计入：待支付与已取消的不算卖出去，
+   * 否则一家刷单又取消的店能把自己刷成热销榜第一。
+   */
+  @ApiProperty({ description: '近 30 天销量（份）', example: 328 })
+  monthlySales!: number;
+
   @ApiProperty({ description: '规格组', type: [PublicSpecGroupDto] })
   specGroups!: PublicSpecGroupDto[];
 }

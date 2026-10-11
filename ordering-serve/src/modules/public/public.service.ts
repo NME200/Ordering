@@ -1,10 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
+
+/** 月销统计窗口（天） */
+const MONTHLY_SALES_WINDOW_DAYS = 30;
 import { BusinessException } from '../../common/exceptions/business.exception';
 import { CommonStatus } from '../../shared/enums/common-status.enum';
 import { ErrorCode } from '../../shared/enums/error-code.enum';
 import { OrderStatus } from '../../shared/enums/order-status.enum';
+import { PAYMENT_CHANNEL_LABELS } from '../../shared/enums/payment-channel.enum';
+import { PaymentStatus } from '../../shared/enums/payment-status.enum';
+import { Payment } from '../payment/entities/payment.entity';
 import { DishSpecGroup } from '../dish/entities/dish-spec-group.entity';
 import { Dish } from '../dish/entities/dish.entity';
 import { DishCategory } from '../dish-category/entities/dish-category.entity';
@@ -12,10 +18,16 @@ import { SpecOption } from '../spec-group/entities/spec-option.entity';
 import { SpecGroup } from '../spec-group/entities/spec-group.entity';
 import { OrderItem } from '../order/entities/order-item.entity';
 import { Order } from '../order/entities/order.entity';
+import { Merchant } from '../merchant/entities/merchant.entity';
 import { Store } from '../store/entities/store.entity';
 import { MerchantService } from '../merchant/merchant.service';
 import { StoreDishService } from '../store-dish/store-dish.service';
 import { CancelPublicOrderDto } from './dto/cancel-public-order.dto';
+import { QueryPublicStoresDto } from './dto/query-public-stores.dto';
+import {
+  PublicStoreListItemDto,
+  PublicStoreListResponseDto,
+} from './dto/public-store-list-response.dto';
 import {
   PublicMenuDishDto,
   PublicMenuResponseDto,
@@ -46,6 +58,7 @@ export class PublicService {
     @InjectRepository(SpecOption) private readonly specOptionRepository: Repository<SpecOption>,
     @InjectRepository(Order) private readonly orderRepository: Repository<Order>,
     @InjectRepository(OrderItem) private readonly orderItemRepository: Repository<OrderItem>,
+    @InjectRepository(Payment) private readonly paymentRepository: Repository<Payment>,
     private readonly storeDishService: StoreDishService,
     private readonly merchantService: MerchantService,
   ) {}
@@ -53,6 +66,91 @@ export class PublicService {
   /** 门店公开信息 */
   async findStore(storeId: number): Promise<PublicStoreResponseDto> {
     return PublicStoreResponseDto.from(await this.loadServedStore(storeId));
+  }
+
+  /**
+   * 门店列表（「查看门店」用，跨商户）。
+   *
+   * 与单店入口同样的可用性口径：门店启用 **且** 所属商户可用（未禁用、未到期），
+   * 不满足的直接不出现 —— 匿名列表里躺一家被停用的店，等于替平台泄露治理状态。
+   * 这里必须自己 join 商户判断：单店用的 `assertUsableForRequest` 带 Redis 缓存，
+   * 按 N 家店逐个调用就是 N 次往返。
+   */
+  async findStores(query: QueryPublicStoresDto): Promise<PublicStoreListResponseDto> {
+    const limit = query.limit ?? 20;
+    const keyword = query.keyword?.trim();
+
+    const builder = this.storeRepository
+      .createQueryBuilder('store')
+      .innerJoin(Merchant, 'merchant', 'merchant.id = store.merchantId')
+      .where('store.status = :enabled', { enabled: CommonStatus.ENABLED })
+      .andWhere('merchant.status = :enabled', { enabled: CommonStatus.ENABLED })
+      // 手工 join 的别名不带软删过滤，条件得自己补，否则删掉的商户还会跟着出来
+      .andWhere('merchant.deletedAt IS NULL')
+      .andWhere('(merchant.expireAt IS NULL OR merchant.expireAt > :now)', { now: new Date() })
+      .orderBy('store.id', 'ASC')
+      .limit(limit);
+
+    if (query.merchantId) {
+      builder.andWhere('store.merchantId = :merchantId', { merchantId: query.merchantId });
+    }
+    if (keyword) {
+      builder.andWhere('store.name LIKE :keyword', { keyword: `%${likeWildcard(keyword)}%` });
+    }
+
+    const stores = await builder.getMany();
+    const sales = await this.storeMonthlySales(stores.map((store) => store.id));
+    return {
+      stores: stores.map((store) => PublicStoreListItemDto.withSales(store, sales.get(store.id) ?? 0)),
+    };
+  }
+
+  /**
+   * 近 30 天各门店的完成订单份数，一条 GROUP BY 拿全。
+   *
+   * 只数已完成 —— 月售在顾客眼里是「这家店卖得动吗」，掺了退单就是骗人。
+   */
+  private async storeMonthlySales(storeIds: number[]): Promise<Map<number, number>> {
+    if (storeIds.length === 0) {
+      return new Map();
+    }
+    const since = new Date(Date.now() - MONTHLY_SALES_WINDOW_DAYS * 86_400_000);
+    const rows = await this.orderItemRepository
+      .createQueryBuilder('item')
+      .innerJoin(Order, 'order', 'order.id = item.orderId')
+      .select('order.storeId', 'storeId')
+      .addSelect('SUM(item.quantity)', 'quantity')
+      .where('order.status = :status', { status: OrderStatus.COMPLETED })
+      .andWhere('order.createdAt >= :since', { since })
+      .andWhere('order.storeId IN (:...storeIds)', { storeIds })
+      .groupBy('order.storeId')
+      .getRawMany<{ storeId: string; quantity: string }>();
+    return new Map(rows.map((row) => [Number(row.storeId), Number(row.quantity)]));
+  }
+
+  /**
+   * 近 30 天本店按菜品的销量。
+   *
+   * 刻意用一条 GROUP BY 一次拿全，而不是每道菜 count 一次；
+   * 门店级数据量（几十道菜 × 30 天）不值得为它引缓存层，真成瓶颈再加 TTL。
+   */
+  async monthlySales(storeId: number, dishIds: number[]): Promise<Map<number, number>> {
+    if (dishIds.length === 0) {
+      return new Map();
+    }
+    const since = new Date(Date.now() - MONTHLY_SALES_WINDOW_DAYS * 86_400_000);
+    const rows = await this.orderItemRepository
+      .createQueryBuilder('item')
+      .innerJoin(Order, 'order', 'order.id = item.orderId')
+      .select('item.dishId', 'dishId')
+      .addSelect('SUM(item.quantity)', 'quantity')
+      .where('order.storeId = :storeId', { storeId })
+      .andWhere('order.status = :status', { status: OrderStatus.COMPLETED })
+      .andWhere('order.createdAt >= :since', { since })
+      .andWhere('item.dishId IN (:...dishIds)', { dishIds })
+      .groupBy('item.dishId')
+      .getRawMany<{ dishId: string; quantity: string }>();
+    return new Map(rows.map((row) => [Number(row.dishId), Number(row.quantity)]));
   }
 
   /** 本店完整菜单：分类 → 在售菜品 → 规格组 */
@@ -88,10 +186,11 @@ export class PublicService {
       }))
       .filter((entry) => entry.effective.onSale || entry.effective.soldOut);
 
-    const specGroupsByDish = await this.loadSpecGroups(
-      onSaleDishes.map((entry) => entry.dish.id),
-      store.merchantId,
-    );
+    const dishIds = onSaleDishes.map((entry) => entry.dish.id);
+    const [specGroupsByDish, sales] = await Promise.all([
+      this.loadSpecGroups(dishIds, store.merchantId),
+      this.monthlySales(store.id, dishIds),
+    ]);
 
     const dishesByCategory = new Map<number, PublicMenuDishDto[]>();
     for (const { dish, effective } of onSaleDishes) {
@@ -106,6 +205,7 @@ export class PublicService {
         sort: dish.sort,
         isRecommend: dish.isRecommend,
         soldOut: effective.soldOut,
+        monthlySales: sales.get(dish.id) ?? 0,
         specGroups: specGroupsByDish.get(dish.id) ?? [],
       });
       dishesByCategory.set(dish.categoryId, list);
@@ -187,14 +287,21 @@ export class PublicService {
     return order;
   }
 
-  /** 组装 C 端订单出参（带门店名） */
+  /** 组装 C 端订单出参（带门店名与支付方式） */
   private async toPublicOrder(order: Order): Promise<PublicOrderResponseDto> {
-    const [items, store] = await Promise.all([
+    const [items, store, payment] = await Promise.all([
       this.orderItemRepository.find({ where: { orderId: order.id }, order: { id: 'ASC' } }),
       this.storeRepository.findOne({ where: { id: order.storeId } }),
+      // 只认成功的那笔：待支付的流水不能当成「已经用某种方式付过」
+      this.paymentRepository.findOne({
+        where: { orderId: order.id, status: PaymentStatus.SUCCESS },
+        order: { id: 'DESC' },
+      }),
     ]);
 
-    return PublicOrderResponseDto.from(order, items, store?.name ?? '');
+    const dto = PublicOrderResponseDto.from(order, items, store?.name ?? '');
+    dto.paidChannelLabel = payment ? (PAYMENT_CHANNEL_LABELS[payment.channel] ?? payment.channel) : null;
+    return dto;
   }
 
   // ==================== 内部辅助 ====================
@@ -290,4 +397,14 @@ export class PublicService {
   private toSpecOptionDto(option: SpecOption): PublicSpecOptionDto {
     return { id: option.id, name: option.name, priceDiff: option.priceDiff };
   }
+}
+
+/**
+ * 转义 LIKE 通配符。
+ *
+ * 搜索词是顾客输入的，不转义的话 `%` 会匹配全表、`_` 会让「人民路_店」这类词
+ * 命中意料外的门店；值本身仍走参数绑定，这里只处理模式字符。
+ */
+function likeWildcard(input: string): string {
+  return input.replace(/[\\%_]/g, (char) => `\\${char}`);
 }

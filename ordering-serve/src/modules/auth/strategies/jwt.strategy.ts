@@ -42,6 +42,17 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
 
   /** 校验通过后返回的对象会挂到 request.user */
   async validate(payload: JwtPayload): Promise<AuthUser> {
+    /**
+     * 顾客令牌一律拒绝。
+     *
+     * 员工与顾客令牌共用同一个签名密钥，而 `customers.id` 与 `users.id` 是
+     * 各自表的自增号 —— 「顾客 3 号」和「员工 3 号」必然同时存在。
+     * 不认载荷类型的话，一张顾客令牌就能冒充同号员工进后台。
+     */
+    if ((payload as { kind?: string }).kind === 'customer') {
+      throw BusinessException.unauthorized('令牌类型不匹配');
+    }
+
     const blacklisted = await this.redis.get(RedisKeys.tokenBlacklist(payload.jti));
     if (blacklisted) {
       throw BusinessException.unauthorized('登录已失效，请重新登录');

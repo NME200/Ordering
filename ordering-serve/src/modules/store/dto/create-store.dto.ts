@@ -4,8 +4,10 @@ import {
   IsEnum,
   IsInt,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -47,6 +49,42 @@ export class CreateStoreDto {
   @IsString()
   @MaxLength(20, { message: '门店电话最长 20 个字符' })
   phone?: string;
+
+  @ApiPropertyOptional({
+    description: '门店 logo / 头图地址，留空则顾客端用店名首字兜底',
+    example: 'https://cdn.example.com/store-1.png',
+    maxLength: 255,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255, { message: 'logo 地址最长 255 个字符' })
+  logo?: string | null;
+
+  @ApiPropertyOptional({
+    description: '营业时间展示文案（只做展示，打烊由营业状态决定）',
+    example: '09:00-21:00',
+    maxLength: 32,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32, { message: '营业时间最长 32 个字符' })
+  businessHours?: string | null;
+
+  @ApiPropertyOptional({ description: '纬度（-90 ~ 90），留空则顾客端不显示距离', example: 29.8852 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({}, { message: 'latitude 必须是数字' })
+  @Min(-90, { message: 'latitude 最小为 -90' })
+  @Max(90, { message: 'latitude 最大为 90' })
+  latitude?: number | null;
+
+  @ApiPropertyOptional({ description: '经度（-180 ~ 180）', example: 121.5281 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({}, { message: 'longitude 必须是数字' })
+  @Min(-180, { message: 'longitude 最小为 -180' })
+  @Max(180, { message: 'longitude 最大为 180' })
+  longitude?: number | null;
 
   @ApiPropertyOptional({
     description: '营业状态：0 打烊 / 1 营业中',

@@ -7,14 +7,18 @@ import {
   Post,
   Put,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PaginatedDto } from '../../common/dto/paginated.dto';
+import { CurrentCustomer } from '../../common/decorators/current-customer.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Permissions } from '../../common/decorators/permissions.decorator';
 import { Public } from '../../common/decorators/public.decorator';
+import { AuthCustomer } from '../../common/interfaces/auth-customer.interface';
 import { AuthUser } from '../../common/interfaces/auth-user.interface';
 import { Permission } from '../../shared/enums/permission.enum';
+import { OptionalCustomerGuard } from '../customer/guards/optional-customer.guard';
 import { CreatePaymentDto } from '../payment/dto/create-payment.dto';
 import {
   PaymentResponseDto,
@@ -40,13 +44,19 @@ export class OrderController {
   constructor(private readonly orderService: OrderService) {}
 
   @Public()
+  @UseGuards(OptionalCustomerGuard)
   @Post()
   @ApiOperation({
-    summary: '创建订单（扫码点餐，无需登录）',
-    description: '金额一律由服务端按菜品当前价 + 规格增量计算，请求中不接收任何价格字段。',
+    summary: '创建订单（扫码点餐）',
+    description:
+      '金额一律由服务端按菜品当前价 + 规格增量计算，请求中不接收任何价格字段。' +
+      '带了顾客令牌则订单归属到账号（进「我的订单」、可用券），没带就是游客单。',
   })
-  create(@Body() dto: CreateOrderDto): Promise<OrderResponseDto> {
-    return this.orderService.create(dto);
+  create(
+    @Body() dto: CreateOrderDto,
+    @CurrentCustomer() customer: AuthCustomer | undefined,
+  ): Promise<OrderResponseDto> {
+    return this.orderService.create(dto, customer);
   }
 
   @Post('pos')

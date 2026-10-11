@@ -26,6 +26,15 @@ async function bootstrap(): Promise<void> {
    */
   app.set('trust proxy', 1);
 
+  /**
+   * JSON 请求体上限：Express 默认只有 100kb，而顾客头像是 base64 入库的。
+   *
+   * 不放开的话，顾客从相册挑了一张没压动的大图，请求在 body 解析阶段就被掐掉，
+   * 界面拿到的是「服务器内部错误」而不是一句能行动的「头像过大」。
+   * 真正的尺寸闸门在 DTO（200K 字符），这里只是别让框架抢答。
+   */
+  app.useBodyParser('json', { limit: '2mb' });
+
   const apiPrefix = configService.getOrThrow<string>('app.apiPrefix');
   const port = configService.getOrThrow<number>('app.port');
   const env = configService.getOrThrow<string>('app.env');

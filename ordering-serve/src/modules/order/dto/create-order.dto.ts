@@ -5,6 +5,7 @@ import {
   ArrayMinSize,
   ArrayUnique,
   IsArray,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -13,6 +14,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { DINING_TYPE_VALUES, DiningType } from '../../../shared/enums/dining-type.enum';
 import { MAX_ORDER_ITEM_LINES, MAX_ORDER_QUANTITY_PER_LINE } from '../constants/order-limits';
 
 /** 单个下单菜品入参 */
@@ -103,9 +105,39 @@ export class CreateOrderDto {
   @MaxLength(16, { message: '桌号最长 16 个字符' })
   tableNo?: string;
 
+  @ApiPropertyOptional({
+    description: '就餐方式：0 堂食 / 1 自提 / 2 外卖配送。只记录与展示，不影响价格',
+    enum: DiningType,
+    default: DiningType.DINE_IN,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsIn(DINING_TYPE_VALUES, { message: 'diningType 只能是 0（堂食）/ 1（自提）/ 2（外卖）' })
+  diningType?: DiningType;
+
   @ApiPropertyOptional({ description: '备注，如「不要葱」', maxLength: 255 })
   @IsOptional()
   @IsString()
   @MaxLength(255, { message: '备注最长 255 个字符' })
   remark?: string;
+
+  /**
+   * 用券。
+   *
+   * 只接受券 ID，**抵扣金额一律由服务端算**：把 discountAmount 交给前端传，
+   * 等于任何人都能下一张「0 元购」的单。
+   */
+  @ApiPropertyOptional({ description: '使用的顾客券 ID（须属于本人且适用于该门店）' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'couponId 必须为整数' })
+  @Min(1, { message: 'couponId 最小为 1' })
+  couponId?: number;
+
+  @ApiPropertyOptional({ description: '收货地址 ID（外卖配送单必填，须属于本人）' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'addressId 必须为整数' })
+  @Min(1, { message: 'addressId 最小为 1' })
+  addressId?: number;
 }

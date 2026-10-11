@@ -13,15 +13,23 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { AuthModule } from './modules/auth/auth.module';
 import { AppConfigModule } from './modules/app-config/app-config.module';
+import { CouponModule } from './modules/coupon/coupon.module';
+import { CustomerModule } from './modules/customer/customer.module';
 import { DatabaseModule } from './modules/database/database.module';
 import { DishCategoryModule } from './modules/dish-category/dish-category.module';
 import { DishModule } from './modules/dish/dish.module';
+import { InvoiceModule } from './modules/invoice/invoice.module';
 import { MerchantModule } from './modules/merchant/merchant.module';
+import { MiniappModule } from './modules/miniapp/miniapp.module';
 import { OrderModule } from './modules/order/order.module';
 import { PaymentConfigModule } from './modules/payment-config/payment-config.module';
+import { PopupModule } from './modules/popup/popup.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { PublicModule } from './modules/public/public.module';
+import { QueueModule } from './modules/queue/queue.module';
 import { RedisModule } from './modules/redis/redis.module';
+import { ReviewModule } from './modules/review/review.module';
+import { ServiceModule } from './modules/service/service.module';
 import { SpecGroupModule } from './modules/spec-group/spec-group.module';
 import { StoreModule } from './modules/store/store.module';
 import { StoreDishModule } from './modules/store-dish/store-dish.module';
@@ -57,7 +65,18 @@ import { UserModule } from './modules/user/user.module';
     PaymentModule,
     PaymentConfigModule,
     PublicModule,
+    PopupModule,
     AppConfigModule,
+    // 顾客域：账号 / 地址 / 会员资产 + 券 / 评价 / 发票 / 客服 / 叫号
+    CouponModule,
+    CustomerModule,
+    ReviewModule,
+    InvoiceModule,
+    ServiceModule,
+    QueueModule,
+
+    // 小程序配置：凭据 / 扫码规则 / 桌号二维码（与支付配置同级，只归平台管理员）
+    MiniappModule,
   ],
   controllers: [AppController],
   providers: [
