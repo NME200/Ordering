@@ -5,6 +5,9 @@ import {
   DataBoard,
   Files,
   OfficeBuilding,
+  Setting,
+  Ticket,
+  Tools,
   User,
   UserFilled,
 } from '@element-plus/icons-vue';
@@ -26,6 +29,10 @@ const ICON_REGISTRY: Record<string, Component> = {
   User,
   CreditCard,
   Brush,
+  Ticket,
+  // 「系统设置」一级菜单与它下面的「小程序配置」
+  Setting,
+  Tools,
 };
 
 /** 按名称取图标组件，未登记时回退到 Files */

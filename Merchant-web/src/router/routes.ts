@@ -38,6 +38,12 @@ export const menuRoutes: RouteRecordRaw[] = [
     meta: { title: '门店管理', icon: 'Shop', permission: Permission.STORE_READ },
   },
   {
+    path: 'table-qrcodes',
+    name: 'TableQrcodeList',
+    component: () => import('@shared/views/table-qrcode/index.vue'),
+    meta: { title: '桌码管理', icon: 'Grid', permission: Permission.STORE_READ },
+  },
+  {
     path: 'accounts',
     name: 'AccountList',
     component: () => import('@shared/views/user/index.vue'),
@@ -60,6 +66,33 @@ export const menuRoutes: RouteRecordRaw[] = [
     name: 'SpecGroupList',
     component: () => import('@shared/views/spec-group/index.vue'),
     meta: { title: '规格组', icon: 'SetUp', permission: Permission.SPEC_READ },
+  },
+  /* 顾客与售后：都是「顾客提交之后商户要接住」的闭环，排在经营配置之后 */
+  {
+    path: 'coupons',
+    name: 'CouponList',
+    component: () => import('@/views/coupon/index.vue'),
+    meta: { title: '优惠券', icon: 'Discount', permission: Permission.COUPON_READ },
+  },
+  // 顾客名册不在商家端：账号是全平台账号，封禁与解封归平台管。
+  // 商家看得到的是自己这一侧的履约数据 —— 评价、开票、客服、券。
+  {
+    path: 'reviews',
+    name: 'ReviewList',
+    component: () => import('@/views/review/index.vue'),
+    meta: { title: '顾客评价', icon: 'Star', permission: Permission.REVIEW_READ },
+  },
+  {
+    path: 'invoices',
+    name: 'InvoiceList',
+    component: () => import('@/views/invoice/index.vue'),
+    meta: { title: '开票申请', icon: 'Document', permission: Permission.INVOICE_READ },
+  },
+  {
+    path: 'service',
+    name: 'ServiceDesk',
+    component: () => import('@/views/service/index.vue'),
+    meta: { title: '客服工作台', icon: 'Headset', permission: Permission.SERVICE_READ },
   },
 ];
 

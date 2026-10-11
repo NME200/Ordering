@@ -36,6 +36,9 @@ const OPTIMIZE_DEPS = [
   'element-plus/es/components/dropdown-item/style/css',
   'element-plus/es/components/dropdown-menu/style/css',
   'element-plus/es/components/empty/style/css',
+  // 「小程序配置」的台位抽屉与侧边栏一级菜单（el-drawer / el-sub-menu）
+  'element-plus/es/components/drawer/style/css',
+  'element-plus/es/components/sub-menu/style/css',
   'element-plus/es/components/form/style/css',
   'element-plus/es/components/form-item/style/css',
   'element-plus/es/components/icon/style/css',

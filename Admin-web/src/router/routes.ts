@@ -1,12 +1,18 @@
 import type { RouteRecordRaw } from 'vue-router';
+import { RouterView } from 'vue-router';
+import { h } from 'vue';
 import { AccountKind, Permission, Role } from '@shared/types/enums';
 
 /**
  * 平台管理端的侧边栏菜单路由。
  *
- * 只放**平台职责**：商户治理 + 账户治理。
+ * 只放**平台职责**：商户治理 + 账户治理 + 平台自有营销与顾客名册。
  * 门店、菜单（分类 / 菜品 / 规格组）属于商户的经营资产，不进侧边栏，
  * 而是在「商户详情」页内以只读标签页的形式提供排查视图 —— 见 `hiddenRoutes`。
+ *
+ * 「平台券管理」与「顾客列表」是这两类数据里**只有平台能做主**的那两个特例：
+ * 券指 merchantId 为空的「平台券」（全场通用、跨商户核销），商户券在页面上禁用并写明原因；
+ * 顾客是全平台账号（一个账号能在所有商户下单），所以名册与封禁都只在平台这边。
  *
  * 账户治理拆成两个页签，因为管的是两拨人：
  * - 「平台账户」= 平台自己的团队（管理员 + 运营专员），只有平台管理员进得来，
@@ -61,6 +67,36 @@ export const menuRoutes: RouteRecordRaw[] = [
     },
   },
   {
+    path: 'popups',
+    name: 'Popups',
+    component: () => import('@/views/popup/index.vue'),
+    meta: {
+      title: '活动弹窗',
+      icon: 'ChatDotSquare',
+      permission: Permission.POPUP_READ,
+    },
+  },
+  {
+    path: 'coupons',
+    name: 'CouponList',
+    component: () => import('@/views/coupon/index.vue'),
+    meta: {
+      title: '平台券管理',
+      icon: 'Ticket',
+      permission: Permission.COUPON_READ,
+    },
+  },
+  {
+    path: 'customers',
+    name: 'CustomerList',
+    component: () => import('@/views/customer/index.vue'),
+    meta: {
+      title: '顾客列表',
+      icon: 'User',
+      permission: Permission.CUSTOMER_READ,
+    },
+  },
+  {
     path: 'payment-configs',
     name: 'PaymentConfig',
     component: () => import('@/views/payment-config/index.vue'),
@@ -69,6 +105,30 @@ export const menuRoutes: RouteRecordRaw[] = [
       icon: 'CreditCard',
       permission: Permission.PAYMENT_CONFIG_READ,
     },
+  },
+  /**
+   * 「系统设置」是一级菜单，下面挂的是**整个平台一份**的系统级配置。
+   *
+   * 分组节点必须给一个透传组件：布局里的 <router-view> 只渲染 matched[1]，
+   * 父级没有组件时它渲染为空，子页面根本进不来（实测过：地址栏变了页面不动）。
+   */
+  {
+    path: 'settings',
+    name: 'Settings',
+    component: { name: 'RouteGroup', render: () => h(RouterView) },
+    meta: { title: '系统设置', icon: 'Setting' },
+    children: [
+      {
+        path: 'miniapp',
+        name: 'MiniappConfig',
+        component: () => import('@/views/settings/miniapp.vue'),
+        meta: {
+          title: '小程序配置',
+          icon: 'Tools',
+          permission: Permission.MINIAPP_READ,
+        },
+      },
+    ],
   },
 ];
 
@@ -112,7 +172,7 @@ const hiddenRoutes: RouteRecordRaw[] = [
   },
 ];
 
-/** 侧边栏菜单项 */
+/** 侧边栏菜单项；children 非空表示它是一个分组（渲染成 el-sub-menu） */
 export interface MenuItem {
   /** 绝对路径 */
   path: string;
@@ -120,22 +180,47 @@ export interface MenuItem {
   icon: string;
   permission?: Permission;
   roles?: Role[];
+  children?: MenuItem[];
 }
 
-/** 由路由表派生的菜单项（只取未隐藏且声明了标题的路由） */
+interface RouteMeta {
+  title?: string;
+  icon?: string;
+  permission?: Permission;
+  roles?: Role[];
+  hidden?: boolean;
+}
+
+/** 递归派生菜单：分组自己没标题又没子项时整条丢掉 */
+function toMenuItem(route: RouteRecordRaw, parentPath: string): MenuItem | null {
+  const meta = route.meta as RouteMeta | undefined;
+  if (meta?.hidden === true) {
+    return null;
+  }
+  const path = `${parentPath}/${route.path ?? ''}`.replace(/\/{2,}/g, '/');
+  const children = (route.children ?? [])
+    .map((child) => toMenuItem(child, path))
+    .filter((child): child is MenuItem => child !== null);
+  if (!meta?.title && !children.length) {
+    return null;
+  }
+  const item: MenuItem = {
+    path,
+    title: meta?.title ?? '',
+    icon: meta?.icon ?? 'Menu',
+    permission: meta?.permission,
+    roles: meta?.roles,
+  };
+  if (children.length) {
+    item.children = children;
+  }
+  return item;
+}
+
+/** 由路由表派生的菜单项（只取未隐藏且声明了标题或子项的路由） */
 export const menuItems: MenuItem[] = menuRoutes
-  .filter((route) => typeof route.path === 'string' && route.meta?.hidden !== true)
-  .map((route) => {
-    const meta = route.meta;
-    return {
-      path: `/${route.path as string}`,
-      title: meta?.title ?? '',
-      icon: meta?.icon ?? 'Menu',
-      permission: meta?.permission as Permission | undefined,
-      roles: meta?.roles,
-    };
-  })
-  .filter((item) => item.title !== '');
+  .map((route) => toMenuItem(route, ''))
+  .filter((item): item is MenuItem => item !== null);
 
 /** 完整路由表 */
 export const routes: RouteRecordRaw[] = [

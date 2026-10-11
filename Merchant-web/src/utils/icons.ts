@@ -1,10 +1,16 @@
 import {
+  Avatar,
   Bowl,
   DataBoard,
+  Discount,
+  Document,
   Files,
+  Grid,
+  Headset,
   Money,
   SetUp,
   Shop,
+  Star,
   Tickets,
   User,
   UserFilled,
@@ -27,6 +33,13 @@ const ICON_REGISTRY: Record<string, Component> = {
   SetUp,
   Money,
   User,
+  Discount,
+  Avatar,
+  Star,
+  Document,
+  Headset,
+  // 「桌码管理」：一张桌一码，用网格表示台位
+  Grid,
 };
 
 /** 按名称取图标组件，未登记时回退到 Files */

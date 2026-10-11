@@ -51,6 +51,8 @@ const OPTIMIZE_DEPS = [
   'element-plus/es/components/pagination/style/css',
   'element-plus/es/components/radio/style/css',
   'element-plus/es/components/radio-group/style/css',
+  // 评价页的星级展示
+  'element-plus/es/components/rate/style/css',
   'element-plus/es/components/scrollbar/style/css',
   'element-plus/es/components/select/style/css',
   'element-plus/es/components/switch/style/css',

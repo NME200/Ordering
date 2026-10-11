@@ -412,6 +412,9 @@ onBeforeUnmount(() => {
               <span class="ocard__src">
                 {{ rowAt(index).sourceLabel }}
                 <template v-if="rowAt(index).tableNo"> · 桌号 {{ rowAt(index).tableNo }}</template>
+                <template v-if="rowAt(index).pickupCode">
+                  · 取餐码 <span class="num pickup-code">{{ rowAt(index).pickupCode }}</span>
+                </template>
               </span>
             </div>
             <span class="ocard__time num">{{ timeOnly(rowAt(index).createdAt) }}</span>
@@ -516,6 +519,9 @@ onBeforeUnmount(() => {
             <el-descriptions-item label="桌号">{{
               orEmpty(detailOrder.tableNo)
             }}</el-descriptions-item>
+            <el-descriptions-item label="取餐码">
+              <span class="num pickup-code">{{ orEmpty(detailOrder.pickupCode) }}</span>
+            </el-descriptions-item>
             <el-descriptions-item label="称呼">{{
               orEmpty(detailOrder.customerName)
             }}</el-descriptions-item>
@@ -913,5 +919,11 @@ onBeforeUnmount(() => {
       color: var(--text-primary);
     }
   }
+}
+
+/* 取餐码是店员这一侧真正要对着喊的字段，比同行说明文字重一档 */
+.pickup-code {
+  font-weight: 600;
+  color: var(--brand-700);
 }
 </style>

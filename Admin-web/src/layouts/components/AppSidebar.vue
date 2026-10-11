@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
-import { menuItems } from '@/router/routes';
+import { menuItems, type MenuItem } from '@/router/routes';
 import { useUserStore } from '@/store/modules/user';
 import { resolveIcon } from '@/utils/icons';
 
@@ -11,11 +11,17 @@ const route = useRoute();
 const userStore = useUserStore();
 
 /** 按角色 + 权限过滤菜单（前端只做展示控制，安全边界在服务端） */
-const visibleMenus = computed(
-  () =>
-    menuItems.filter(
-      (item) => userStore.hasRole(item.roles) && userStore.hasPermission(item.permission),
-    ),
+function visible(item: MenuItem): boolean {
+  return userStore.hasRole(item.roles) && userStore.hasPermission(item.permission);
+}
+
+const visibleMenus = computed(() =>
+  menuItems
+    .map((item) =>
+      item.children ? { ...item, children: item.children.filter(visible) } : item,
+    )
+    // 分组里一个子项都没被授权时，整组不显示，避免出现点开是空的菜单
+    .filter((item) => (item.children ? item.children.length > 0 : visible(item))),
 );
 
 /** 详情页等非菜单页面通过 meta.activeMenu 指定高亮的菜单项 */
@@ -52,10 +58,22 @@ const activeMenu = computed(() => route.meta.activeMenu ?? route.path);
         :collapse-transition="false"
         router
       >
-        <el-menu-item v-for="item in visibleMenus" :key="item.path" :index="item.path">
-          <el-icon><component :is="resolveIcon(item.icon)" /></el-icon>
-          <template #title>{{ item.title }}</template>
-        </el-menu-item>
+        <template v-for="item in visibleMenus" :key="item.path">
+          <el-sub-menu v-if="item.children?.length" :index="item.path">
+            <template #title>
+              <el-icon><component :is="resolveIcon(item.icon)" /></el-icon>
+              <span>{{ item.title }}</span>
+            </template>
+            <el-menu-item v-for="child in item.children" :key="child.path" :index="child.path">
+              <el-icon><component :is="resolveIcon(child.icon)" /></el-icon>
+              <template #title>{{ child.title }}</template>
+            </el-menu-item>
+          </el-sub-menu>
+          <el-menu-item v-else :index="item.path">
+            <el-icon><component :is="resolveIcon(item.icon)" /></el-icon>
+            <template #title>{{ item.title }}</template>
+          </el-menu-item>
+        </template>
       </el-menu>
     </el-scrollbar>
 
@@ -182,6 +200,32 @@ const activeMenu = computed(() => route.meta.activeMenu ?? route.path);
 
   &.is-collapsed &__menu :deep(.el-menu-item) {
     margin: 3px 8px;
+  }
+
+  /* 分组（一级菜单）标题与普通项同一套外观；子项缩进一格表示层级 */
+  &__menu :deep(.el-sub-menu__title) {
+    margin: 3px 10px;
+    border-radius: var(--radius-md);
+    font-size: 13.5px;
+    color: var(--sidebar-text);
+  }
+
+  &__menu :deep(.el-sub-menu__title .el-icon) {
+    font-size: 17px;
+    margin-right: 10px;
+  }
+
+  &__menu :deep(.el-sub-menu.is-active > .el-sub-menu__title) {
+    color: var(--sidebar-text-strong);
+  }
+
+  &__menu :deep(.el-sub-menu .el-menu) {
+    background-color: transparent;
+  }
+
+  &__menu :deep(.el-sub-menu .el-menu-item) {
+    min-width: auto;
+    margin-left: 26px;
   }
 
   /* ---------- 底部说明 ---------- */

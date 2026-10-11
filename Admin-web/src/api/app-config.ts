@@ -33,7 +33,12 @@ export function publishAppConfig(id: number): Promise<AppConfig> {
   return request<AppConfig>({ url: `/app-configs/${id}/publish`, method: 'post' });
 }
 
-/** 删除草稿 */
+/** 只改方案名字（草稿 / 生效中 / 历史版本都可以） */
+export function renameAppConfig(id: number, name: string): Promise<AppConfig> {
+  return request<AppConfig>({ url: `/app-configs/${id}/name`, method: 'put', data: { name } });
+}
+
+/** 删除方案（软删）。草稿与历史版本可删，生效中的会被服务端拒 */
 export function removeAppConfig(id: number): Promise<void> {
   return request<void>({ url: `/app-configs/${id}`, method: 'delete' });
 }

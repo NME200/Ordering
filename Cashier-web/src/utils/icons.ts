@@ -1,4 +1,4 @@
-import { KnifeFork, Money, Tickets } from '@element-plus/icons-vue';
+import { Bell, KnifeFork, Money, Tickets } from '@element-plus/icons-vue';
 import type { Component } from 'vue';
 
 /**
@@ -11,6 +11,7 @@ const ICON_REGISTRY: Record<string, Component> = {
   KnifeFork,
   Tickets,
   Money,
+  Bell,
 };
 
 /** 按名称取图标组件，未登记时回退到 Tickets */

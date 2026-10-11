@@ -390,6 +390,9 @@ onMounted(async () => {
               <span class="cell-stack__sub">
                 {{ row.sourceLabel || ORDER_SOURCE_LABELS[row.source as OrderSource] }}
                 <template v-if="row.tableNo"> · 桌号 {{ row.tableNo }}</template>
+                <template v-if="row.pickupCode">
+                  · 取餐码 <span class="pickup-code num">{{ row.pickupCode }}</span>
+                </template>
               </span>
             </div>
           </template>
@@ -508,6 +511,9 @@ onMounted(async () => {
           <el-descriptions :column="2" border size="small" class="detail__desc">
             <el-descriptions-item label="门店">{{ storeName(detailOrder.storeId) }}</el-descriptions-item>
             <el-descriptions-item label="桌号">{{ orEmpty(detailOrder.tableNo) }}</el-descriptions-item>
+            <el-descriptions-item label="取餐码">
+              <span class="pickup-code num">{{ orEmpty(detailOrder.pickupCode) }}</span>
+            </el-descriptions-item>
             <el-descriptions-item label="下单人">{{ orEmpty(detailOrder.customerName) }}</el-descriptions-item>
             <el-descriptions-item label="手机号">
               <span class="num">{{ orEmpty(detailOrder.customerPhone) }}</span>
@@ -638,6 +644,12 @@ onMounted(async () => {
 
 .cell-stack--right {
   align-items: flex-end;
+}
+
+/* 取餐码是店员这一侧真正要对着喊的字段，比旁边的说明文字重一档 */
+.pickup-code {
+  font-weight: 600;
+  color: var(--brand-700);
 }
 
 /* ---------------- 详情抽屉 ---------------- */

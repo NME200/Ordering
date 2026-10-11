@@ -4,11 +4,11 @@ import { Permission } from '@shared/types/enums';
 /**
  * 收银台的通道导航。
  *
- * 收银台不是后台：**入口越少越快**。这里只放三张通道，
+ * 收银台不是后台：**入口越少越快**。这里只放四张通道，
  * 门店 / 员工 / 菜单的维护属于 Merchant-web，收银台一律不提供编辑入口
  * （收银员本来也只有菜单只读权限）。
  *
- * 顺序按使用频率：开单收银是站着操作的，永远排第一。
+ * 顺序按使用频率：开单收银是站着操作的，永远排第一；叫号台守在门口用。
  */
 export const menuRoutes: RouteRecordRaw[] = [
   {
@@ -42,6 +42,17 @@ export const menuRoutes: RouteRecordRaw[] = [
       navLabel: '收款',
       icon: 'Money',
       permission: Permission.PAYMENT_READ,
+    },
+  },
+  {
+    path: 'queue',
+    name: 'QueueDesk',
+    component: () => import('@/views/queue/queue.vue'),
+    meta: {
+      title: '叫号台',
+      navLabel: '叫号',
+      icon: 'Bell',
+      permission: Permission.QUEUE_READ,
     },
   },
 ];
