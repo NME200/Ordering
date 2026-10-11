@@ -62,6 +62,8 @@ export interface Order {
   customerName: string | null;
   customerPhone: string | null;
   tableNo: string | null;
+  /** 取餐码：仅自提单有，顾客在柜台前报的就是它，店员按它找单 */
+  pickupCode: string | null;
   remark: string | null;
   paidAt: string | null;
   acceptedAt: string | null;

@@ -151,6 +151,48 @@ export enum Permission {
   APP_CONFIG_READ = 'app-config:read',
   /** 小程序布局配置：修改与发布 */
   APP_CONFIG_UPDATE = 'app-config:update',
+
+  /** 活动弹窗：查看配置与投放数据 */
+  POPUP_READ = 'popup:read',
+  /** 活动弹窗：新建 / 修改 / 下线 */
+  POPUP_UPDATE = 'popup:update',
+
+  /** 顾客账号与会员资产：查看 */
+  CUSTOMER_READ = 'customer:read',
+  /** 顾客账号：封禁 / 解封（平台端没有这个权限点，封禁是商户动作） */
+  CUSTOMER_UPDATE = 'customer:update',
+
+  /** 优惠券模板与发放记录：查看 */
+  COUPON_READ = 'coupon:read',
+  /** 优惠券模板：新建 / 修改 / 上下架（平台端只能作用于 merchantId 为空的平台券） */
+  COUPON_UPDATE = 'coupon:update',
+
+  /** 顾客评价：查看 */
+  REVIEW_READ = 'review:read',
+  /** 顾客评价：商家回复 */
+  REVIEW_UPDATE = 'review:update',
+
+  /** 开票申请：查看 */
+  INVOICE_READ = 'invoice:read',
+  /** 开票申请：受理（受理 / 回填发票号 / 驳回） */
+  INVOICE_UPDATE = 'invoice:update',
+
+  /** 在线客服会话：查看 */
+  SERVICE_READ = 'service:read',
+  /** 在线客服会话：以客服身份回复 / 结束会话 */
+  SERVICE_UPDATE = 'service:update',
+
+  /** 排队叫号：查看队列 */
+  QUEUE_READ = 'queue:read',
+  /** 排队叫号：门店代客取号 */
+  QUEUE_CREATE = 'queue:create',
+  /** 排队叫号：叫号 / 入座 / 过号 / 召回 */
+  QUEUE_UPDATE = 'queue:update',
+
+  /** 小程序配置（凭据 / 扫码规则 / 桌号二维码）：查看 */
+  MINIAPP_READ = 'miniapp:read',
+  /** 小程序配置：修改凭据与扫码规则、生成桌号二维码 */
+  MINIAPP_UPDATE = 'miniapp:update',
 }
 
 /* ============================================================
@@ -435,6 +477,9 @@ export const GRANTABLE_PERMISSION_GROUPS: { label: string; options: Permission[]
       Permission.SPEC_READ,
       Permission.ORDER_READ,
       Permission.PAYMENT_READ,
+      // 顾客名册与券的读视图可以切给被授权的运营；改券（coupon:update）仍是平台管理员的动作
+      Permission.CUSTOMER_READ,
+      Permission.COUPON_READ,
     ],
   },
 ];
@@ -485,4 +530,29 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
 
   [Permission.APP_CONFIG_READ]: '查看小程序布局',
   [Permission.APP_CONFIG_UPDATE]: '修改与发布小程序布局',
+
+  [Permission.POPUP_READ]: '查看活动弹窗',
+  [Permission.POPUP_UPDATE]: '维护活动弹窗',
+
+  [Permission.CUSTOMER_READ]: '查看顾客与会员资产',
+  [Permission.CUSTOMER_UPDATE]: '封禁 / 解封顾客',
+
+  [Permission.COUPON_READ]: '查看优惠券与发放记录',
+  [Permission.COUPON_UPDATE]: '新建 / 修改优惠券',
+
+  [Permission.REVIEW_READ]: '查看顾客评价',
+  [Permission.REVIEW_UPDATE]: '回复顾客评价',
+
+  [Permission.INVOICE_READ]: '查看开票申请',
+  [Permission.INVOICE_UPDATE]: '受理开票申请（开票 / 驳回）',
+
+  [Permission.SERVICE_READ]: '查看客服会话',
+  [Permission.SERVICE_UPDATE]: '回复 / 结束客服会话',
+
+  [Permission.QUEUE_READ]: '查看排队队列',
+  [Permission.QUEUE_CREATE]: '门店代客取号',
+  [Permission.QUEUE_UPDATE]: '叫号 / 入座 / 过号 / 召回',
+
+  [Permission.MINIAPP_READ]: '查看小程序配置',
+  [Permission.MINIAPP_UPDATE]: '修改小程序配置与生成桌号二维码',
 };

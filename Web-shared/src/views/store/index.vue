@@ -133,6 +133,10 @@ interface StoreForm {
   code: string;
   address: string;
   phone: string;
+  logo: string;
+  businessHours: string;
+  latitude: string;
+  longitude: string;
   businessStatus: BusinessStatus;
 }
 
@@ -144,11 +148,45 @@ function createEmptyForm(): StoreForm {
     code: '',
     address: '',
     phone: '',
+    logo: '',
+    businessHours: '',
+    latitude: '',
+    longitude: '',
     businessStatus: BusinessStatus.OPEN,
   };
 }
 
 const dialogVisible = ref(false);
+
+/**
+ * 坐标输入是字符串，留空就下发 null（顾客端只是不显示距离，不影响下单）。
+ * 范围交给表单规则拦，这里只负责转数字。
+ */
+function toCoordinate(value: string): number | null {
+  const text = value.trim();
+  if (!text) {
+    return null;
+  }
+  const num = Number(text);
+  return Number.isFinite(num) ? num : null;
+}
+
+/** 经纬度留空是合法的（表示没录入），但填了就必须落在合法区间，别让脏坐标进库 */
+function coordinateValidator(limit: number) {
+  return (_rule: unknown, value: string, callback: (error?: Error) => void): void => {
+    const text = String(value ?? '').trim();
+    if (!text) {
+      callback();
+      return;
+    }
+    const num = Number(text);
+    if (!Number.isFinite(num) || Math.abs(num) > limit) {
+      callback(new Error(`需要在 -${limit} ~ ${limit} 之间`));
+      return;
+    }
+    callback();
+  };
+}
 const saving = ref(false);
 const formRef = ref<FormInstance>();
 const form = reactive<StoreForm>(createEmptyForm());
@@ -164,6 +202,10 @@ const rules = computed<FormRules<StoreForm>>(() => ({
   code: [{ max: 32, message: '门店编码最长 32 个字符', trigger: 'blur' }],
   address: [{ max: 255, message: '门店地址最长 255 个字符', trigger: 'blur' }],
   phone: [{ max: 20, message: '门店电话最长 20 个字符', trigger: 'blur' }],
+  logo: [{ max: 255, message: 'logo 地址最长 255 个字符', trigger: 'blur' }],
+  businessHours: [{ max: 32, message: '营业时间最长 32 个字符', trigger: 'blur' }],
+  latitude: [{ validator: coordinateValidator(90), trigger: 'blur' }],
+  longitude: [{ validator: coordinateValidator(180), trigger: 'blur' }],
 }));
 
 const dialogTitle = computed(() => (form.id === null ? '新增门店' : '编辑门店'));
@@ -187,6 +229,10 @@ function openEdit(row: Store): void {
     code: row.code ?? '',
     address: row.address ?? '',
     phone: row.phone ?? '',
+    logo: row.logo ?? '',
+    businessHours: row.businessHours ?? '',
+    latitude: row.latitude === null || row.latitude === undefined ? '' : String(row.latitude),
+    longitude: row.longitude === null || row.longitude === undefined ? '' : String(row.longitude),
     businessStatus: row.businessStatus,
   });
   dialogVisible.value = true;
@@ -207,6 +253,10 @@ async function handleSave(): Promise<void> {
         code: form.code.trim() || undefined,
         address: form.address.trim() || undefined,
         phone: form.phone.trim() || undefined,
+        logo: form.logo.trim() || null,
+        businessHours: form.businessHours.trim() || null,
+        latitude: toCoordinate(form.latitude),
+        longitude: toCoordinate(form.longitude),
         businessStatus: form.businessStatus,
       });
       ElMessage.success('门店已创建');
@@ -216,6 +266,10 @@ async function handleSave(): Promise<void> {
         code: form.code.trim() || undefined,
         address: form.address.trim() || undefined,
         phone: form.phone.trim() || undefined,
+        logo: form.logo.trim() || null,
+        businessHours: form.businessHours.trim() || null,
+        latitude: toCoordinate(form.latitude),
+        longitude: toCoordinate(form.longitude),
         businessStatus: form.businessStatus,
       });
       ElMessage.success('门店已更新');
@@ -475,6 +529,19 @@ onMounted(async () => {
           <el-input v-model="form.phone" placeholder="选填" maxlength="20" />
         </el-form-item>
 
+        <el-form-item label="门店 logo" prop="logo">
+          <el-input v-model="form.logo" placeholder="图片地址 https://… 留空则顾客端用店名首字" clearable />
+        </el-form-item>
+        <el-form-item label="营业时间" prop="businessHours">
+          <el-input v-model="form.businessHours" placeholder="如 09:00-21:00，只做展示" clearable />
+        </el-form-item>
+        <el-form-item label="坐标（选填）">
+          <div class="coord-row">
+            <el-input v-model="form.latitude" placeholder="纬度 -90 ~ 90" maxlength="12" />
+            <el-input v-model="form.longitude" placeholder="经度 -180 ~ 180" maxlength="12" />
+          </div>
+          <p class="form-hint">填了顾客端才显示「距您 xx m」；留空只影响距离展示，不影响下单。</p>
+        </el-form-item>
         <el-form-item label="营业状态">
           <el-radio-group v-model="form.businessStatus">
             <el-radio :value="BusinessStatus.OPEN">营业中</el-radio>
