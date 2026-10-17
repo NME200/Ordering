@@ -43,6 +43,15 @@ export interface CallbackResult {
    * 重推到一天以上，日志里全是假警报。
    */
   ignore?: boolean;
+  /**
+   * 退款结果通知带回来的商户退款单号。
+   *
+   * 有了它，上层才能把「退款成功了」真正落到支付单上 ——
+   * 否则异步退款永远停在处理中，界面只能靠人工去核对。
+   */
+  refundNo?: string;
+  /** 退款是否成功（仅退款结果通知有值） */
+  refundSucceeded?: boolean;
   /** 支付单号 */
   paymentNo: string;
   /** 渠道交易流水号 */
@@ -68,6 +77,13 @@ export interface RefundInput {
 /** 退款结果 */
 export interface RefundResult {
   success: boolean;
+  /**
+   * 渠道已受理但还没出终态（微信的 PROCESSING）。
+   *
+   * 上层必须把它和「失败」分开：落成 FAILED 会重新打开退款认领的闸门，
+   * 于是同一次退款可以被再发一遍（换一个退款单号，渠道侧就是第二笔）。
+   */
+  pending?: boolean;
   /** 渠道侧退款流水号 */
   refundTransactionId: string;
   message?: string;

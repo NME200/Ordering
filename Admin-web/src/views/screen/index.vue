@@ -170,7 +170,8 @@ const storeOption = computed(() => rankOption(data.value?.storeRank ?? []));
       </ScreenPanel>
 
       <ScreenPanel class="area-channel" title="今日支付渠道占比" hint="含线下收款">
-        <ScreenChart :option="channelOption" />
+        <ScreenChart v-if="data?.channelMix?.length" :option="channelOption" />
+        <p v-else class="panel__empty">今天还没有收到钱</p>
       </ScreenPanel>
 
       <ScreenPanel class="area-totals" title="平台盘子">
@@ -184,11 +185,13 @@ const storeOption = computed(() => rankOption(data.value?.storeRank ?? []));
       </ScreenPanel>
 
       <ScreenPanel class="area-merchant" title="今日商户实收 Top 10">
-        <ScreenChart :option="merchantOption" />
+        <ScreenChart v-if="data?.merchantRank?.length" :option="merchantOption" />
+        <p v-else class="panel__empty">今天还没有商户收到钱</p>
       </ScreenPanel>
 
       <ScreenPanel class="area-store" title="今日门店实收 Top 10">
-        <ScreenChart :option="storeOption" />
+        <ScreenChart v-if="data?.storeRank?.length" :option="storeOption" />
+        <p v-else class="panel__empty">今天还没有门店收到钱</p>
       </ScreenPanel>
 
       <ScreenPanel class="area-live" title="全站实时单流" hint="最近 20 单">
@@ -278,6 +281,17 @@ const storeOption = computed(() => rankOption(data.value?.storeRank ?? []));
 .area-merchant { grid-column: span 4; }
 .area-store { grid-column: span 4; }
 .area-live { grid-column: span 4; }
+
+/* 空态要说人话：整块面板留白会被当成"屏坏了"，而这里其实只是今天还没人成交 */
+.panel__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  margin: 0;
+  font-size: 15px;
+  color: var(--screen-ink-2);
+}
 
 .totals {
   height: 100%;

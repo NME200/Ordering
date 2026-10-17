@@ -199,6 +199,12 @@ export class PaymentService {
       );
     }
     if (parsed.ignore) {
+      // 退款结果通知：按商户退款单号找到那张支付单，把终态落下去。
+      // 不落的话异步退款会永远停在「处理中」，界面只能靠人工去猜。
+      if (parsed.refundNo) {
+        await this.applyRefundNotice(parsed.refundNo, parsed.refundSucceeded === true);
+        return null;
+      }
       this.logger.log(`渠道通知已确认收到，不推进支付单：${channel}`);
       return null;
     }
@@ -462,18 +468,18 @@ export class PaymentService {
   // ==================== 内部辅助 ====================
 
   /**
-   * JSAPI 支付的 openid：**订单已绑顾客时以库内为准**，前端传什么都不认。
+   * JSAPI 支付的 openid：**订单已绑顾客时只认库里的值**，前端传什么都不认。
    *
    * 填别人的 openid，付款页就会弹到别人手机上（钱也是别人付），
    * 而这一步没有任何校验能区分「他填了自己的」和「他填了别人的」。
-   * 只有账号还没绑过微信、或本机票据下单（没有账号）时，才用前端给的那一个。
+   * 所以账号已绑定时哪怕库里 openid 为空也不回落到前端值 —— 那种情况让渠道实现
+   * 回一句「请先完成微信登录」，要顾客去绑，而不是拿一个来路不明的 openid 下单。
+   * 只有真正没有账号归属的游客单，才用前端给的那一个。
    */
   private async resolveOpenId(order: Order, clientOpenId?: string): Promise<string | undefined> {
     if (order.customerId) {
       const customer = await this.customerRepository.findOne({ where: { id: order.customerId } });
-      if (customer?.openid) {
-        return customer.openid;
-      }
+      return customer?.openid ?? undefined;
     }
     return clientOpenId;
   }
@@ -580,6 +586,16 @@ export class PaymentService {
       throw error;
     }
 
+    // 渠道已受理但未出终态：保持「处理中」不动，等退款结果通知回写。
+    // 落成 FAILED 等于把这张单重新放进可认领状态，换一个退款单号就能再退一次。
+    if (result.pending) {
+      this.logger.warn(`退款处理中，等待渠道通知回写：${refundNo}`);
+      throw BusinessException.badRequest(
+        ErrorCode.PAYMENT_REFUND_FAILED,
+        result.message ?? '渠道已受理退款，结果稍后到账，请勿重复发起',
+      );
+    }
+
     // 只回写自己这一次认领（带上 refundNo 条件），避免覆盖别人的退款结果
     if (result.success) {
       await this.paymentRepository.update(
@@ -620,6 +636,50 @@ export class PaymentService {
 
     this.logger.log(`退款成功：支付单 ${payment.paymentNo}，退款单号 ${refundNo}`);
     return PaymentResponseDto.from(payment);
+  }
+
+  /**
+   * 回写渠道的退款结果通知。
+   *
+   * 只动「处理中」的那张单：退款成功通知可能重复到达，也可能晚于我们自己的
+   * 同步结果，带条件更新才能让重复通知变成一次空操作。
+   * 积分扣回只在真正由这条通知推进成功时做一次（唯一索引兜底）。
+   */
+  private async applyRefundNotice(refundNo: string, succeeded: boolean): Promise<void> {
+    const payment = await this.paymentRepository.findOne({ where: { refundNo } });
+    if (!payment) {
+      this.logger.warn(`收到未知退款单号的通知：${refundNo}`);
+      return;
+    }
+    if (payment.refundStatus !== RefundStatus.PENDING) {
+      this.logger.log(`退款单 ${refundNo} 已是终态，忽略重复通知`);
+      return;
+    }
+
+    if (!succeeded) {
+      await this.paymentRepository.update(
+        { id: payment.id, refundStatus: RefundStatus.PENDING, refundNo },
+        { refundStatus: RefundStatus.FAILED },
+      );
+      this.logger.warn(`渠道通知退款未成功：${refundNo}`);
+      return;
+    }
+
+    const updated = await this.paymentRepository.update(
+      { id: payment.id, refundStatus: RefundStatus.PENDING, refundNo },
+      {
+        refundStatus: RefundStatus.SUCCESS,
+        refundAmount: payment.amount,
+        refundedAt: new Date(),
+      },
+    );
+    if (updated.affected === 1) {
+      const order = await this.orderRepository.findOne({ where: { id: payment.orderId } });
+      if (order) {
+        await this.memberService.reverseForRefund(order);
+      }
+      this.logger.log(`退款结果通知已回写成功：${refundNo}`);
+    }
   }
 
   /** 校验并规范化渠道参数 */

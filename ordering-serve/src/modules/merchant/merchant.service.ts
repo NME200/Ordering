@@ -1,4 +1,4 @@
-import { HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import Redis from 'ioredis';
 import { DataSource, Not, Repository } from 'typeorm';
@@ -35,6 +35,8 @@ interface MerchantState {
  */
 @Injectable()
 export class MerchantService {
+  private readonly logger = new Logger(MerchantService.name);
+
   constructor(
     @InjectRepository(Merchant)
     private readonly merchantRepository: Repository<Merchant>,
@@ -247,9 +249,13 @@ export class MerchantService {
   async remove(id: number): Promise<void> {
     await this.findByIdOrFail(id);
     await this.merchantRepository.softDelete(id);
+    // 租户没了，它名下的账号必须一起软删 —— 否则会留下一批
+    // 「登录得进来、但所属商户已不存在」的孤儿账号（实测过：请求会 404 商户不存在）
+    const accounts = await this.userService.softDeleteByMerchant(id);
     // 软删后 findOne 不再返回该商户，请求链路会按「所属商户不存在」拒绝；
     // 这里失效缓存是为了让拒绝立刻生效，而不是等缓存过期。
     await this.invalidateState(id);
+    this.logger.log(`已删除商户 ${id}，连带软删账号 ${accounts} 个`);
   }
 
   /** 商户名称唯一性校验（软删除的记录不占用名称） */

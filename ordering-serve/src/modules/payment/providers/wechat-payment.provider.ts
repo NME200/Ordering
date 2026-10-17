@@ -41,6 +41,8 @@ import type {
 
 /** 一次渠道请求的超时：微信接口偶发挂住，不能让顾客对着转圈的收银台 */
 const REQUEST_TIMEOUT_MS = 10_000;
+/** 回调通知的可接受时间偏差（秒）。官方建议 5 分钟 */
+const CALLBACK_MAX_AGE_SECONDS = 300;
 
 /** 微信支付回传的错误结构，只取用得上的三项 */
 interface WechatErrorBody {
@@ -232,6 +234,13 @@ export class WechatPaymentProvider implements PaymentProvider {
     if (!signature || !nonce || !timestamp || !serial) {
       return this.callbackFailure('回调缺少 Wechatpay-Signature / Nonce / Timestamp / Serial 请求头');
     }
+    // 时间戳时效窗口：超过 5 分钟的通知一律不认。
+    // 不做这一步的话，抓到任意一条历史回调就能无限重放（幂等分支只回读成功单、
+    // 不改状态，所以危害限于信息回显，但"永远有效"这件事本身就不该存在）。
+    const ageSeconds = Math.abs(Date.now() / 1000 - Number(timestamp));
+    if (!Number.isFinite(ageSeconds) || ageSeconds > CALLBACK_MAX_AGE_SECONDS) {
+      return this.callbackFailure('回调时间戳超出可接受窗口（本机与渠道时钟偏差超过 5 分钟）');
+    }
     if (serial.toUpperCase() !== this.expectedSerial.toUpperCase()) {
       return this.callbackFailure('回调的 Wechatpay-Serial 与本系统配置的微信密钥不是同一把');
     }
@@ -283,9 +292,18 @@ export class WechatPaymentProvider implements PaymentProvider {
 
     const isRefundEvent = eventType.startsWith('REFUND.') || plain.out_refund_no !== undefined;
     if (isRefundEvent) {
-      // 退款结果我们下单时已经同步拿到，这条通知确认收到即可，别让它去改支付单状态
-      this.logger.log(`微信支付退款结果通知：${String(plain.out_refund_no ?? '')} ${String(plain.refund_status ?? '')}`);
-      return { success: true, ignore: true, paymentNo: '', transactionId: '', amount: 0 };
+      // 退款结果交给上层回写支付单：只记一行日志的话，异步退款会永远停在「处理中」
+      const refundStatus = String(plain.refund_status ?? '');
+      this.logger.log(`微信支付退款结果通知：${String(plain.out_refund_no ?? '')} ${refundStatus}`);
+      return {
+        success: true,
+        ignore: true,
+        paymentNo: '',
+        transactionId: '',
+        amount: 0,
+        refundNo: String(plain.out_refund_no ?? ''),
+        refundSucceeded: refundStatus === 'SUCCESS',
+      };
     }
 
     const tradeState = String(plain.trade_state ?? '');
@@ -332,7 +350,14 @@ export class WechatPaymentProvider implements PaymentProvider {
       return { success: true, refundTransactionId: refundId };
     }
     if (status === 'PROCESSING') {
-      return { success: false, refundTransactionId: refundId, message: '微信退款处理中，请稍后在支付流水里核对结果，不要重复发起' };
+      // 渠道已受理，终态稍后用退款结果通知回写。标成 pending 让上层保持「处理中」，
+      // 绝不能算失败 —— 那样会放开用新退款单号再退一次的口子。
+      return {
+        success: false,
+        pending: true,
+        refundTransactionId: refundId,
+        message: '微信已受理退款，结果稍后到账（渠道会另行通知）',
+      };
     }
     return { success: false, refundTransactionId: refundId, message: `微信退款未成功（${status || '渠道未返回状态'}）` };
   }

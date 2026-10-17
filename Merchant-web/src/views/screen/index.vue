@@ -217,15 +217,18 @@ const storeOption = computed(() => rankOption(data.value?.storeRank ?? [], '元'
       </ScreenPanel>
 
       <ScreenPanel class="area-mix" title="就餐方式占比" hint="只算付过钱的单">
-        <ScreenChart :option="diningOption" />
+        <ScreenChart v-if="data?.diningMix?.length" :option="diningOption" />
+        <p v-else class="panel__empty">今天还没有成交</p>
       </ScreenPanel>
 
       <ScreenPanel class="area-dish" title="今日菜品销量 Top 10">
-        <ScreenChart :option="dishOption" />
+        <ScreenChart v-if="data?.topDishes?.length" :option="dishOption" />
+        <p v-else class="panel__empty">今天还没有成交的菜品</p>
       </ScreenPanel>
 
       <ScreenPanel class="area-store" title="今日门店实收 Top 10">
-        <ScreenChart :option="storeOption" />
+        <ScreenChart v-if="data?.storeRank?.length" :option="storeOption" />
+        <p v-else class="panel__empty">今天还没有门店收到钱</p>
       </ScreenPanel>
 
       <ScreenPanel class="area-live" title="实时单流" hint="最近 20 单">
@@ -320,6 +323,17 @@ const storeOption = computed(() => rankOption(data.value?.storeRank ?? [], '元'
 .area-dish { grid-column: span 4; }
 .area-store { grid-column: span 3; }
 .area-live { grid-column: span 5; }
+
+/* 空态要说人话：整块面板留白会被当成"屏坏了"，而这里其实只是今天还没人成交 */
+.panel__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  margin: 0;
+  font-size: 15px;
+  color: var(--screen-ink-2);
+}
 
 .live {
   height: 100%;

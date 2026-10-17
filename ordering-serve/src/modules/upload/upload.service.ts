@@ -137,10 +137,24 @@ export class UploadService {
    * 没配就按当前请求现推：`trust proxy` 已开，所以 `x-forwarded-proto` 能被 Express 认下来，
    * 反代后面也能拿到真实的 https 与域名。
    */
+  /**
+   * 拼图片的对外根地址。
+   *
+   * 没配 `UPLOAD_PUBLIC_BASE` 时按请求头现推 —— 这只在开发环境可接受：
+   * Host 是调用方说了算的头，生产上谁传图谁就能把落库地址改成任意域名
+   * （图变成指向别人站点的链接，且改不回来）。所以生产缺这个配置就直接拒，
+   * 让运维在部署时补上，而不是静默存下一条投毒过的地址。
+   */
   private baseOf(request: Request): string {
     const configured = this.config.get<string>('upload.publicBase');
     if (configured) {
       return configured;
+    }
+    if (this.config.getOrThrow<boolean>('app.isProduction')) {
+      throw BusinessException.badRequest(
+        ErrorCode.UNKNOWN,
+        '生产环境必须先配置 UPLOAD_PUBLIC_BASE，否则上传的图片地址会被请求头左右',
+      );
     }
     const protocol = request.secure ? 'https' : request.protocol;
     return `${protocol}://${request.get('host') ?? `localhost:${this.config.get('app.port')}`}`;

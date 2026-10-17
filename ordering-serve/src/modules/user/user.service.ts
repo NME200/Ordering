@@ -303,6 +303,18 @@ export class UserService {
     await this.userRepository.softDelete(id);
   }
 
+  /**
+   * 商户被删除时连带软删它名下的全部账号，返回处理条数。
+   *
+   * 不这么做的话会留下一批「登录得进来、但所属商户已不存在」的孤儿账号：
+   * 请求链路会在解析商户时报 404，看着像坏了，而密码哈希还挂在库里。
+   * 由 MerchantService.remove() 调用，租户生命周期归它管。
+   */
+  async softDeleteByMerchant(merchantId: number): Promise<number> {
+    const result = await this.userRepository.softDelete({ merchantId });
+    return result.affected ?? 0;
+  }
+
   /** 重置账号密码（管理员操作） */
   async resetPassword(
     id: number,

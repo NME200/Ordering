@@ -446,7 +446,7 @@ export class MemberService {
     if (!rule || rule.orderBonus <= 0) {
       return 0;
     }
-    const bonus = await this.withinCap(rule, customerId, rule.orderBonus);
+    const bonus = await this.withinCap(rule, customerId, rule.orderBonus, em);
     if (bonus <= 0) {
       return 0;
     }
@@ -476,21 +476,30 @@ export class MemberService {
     if (rule.reviewBonus <= 0) {
       return 0;
     }
-    const bonus = await this.withinCap(rule, customerId, rule.reviewBonus);
-    if (bonus <= 0) {
-      return 0;
-    }
-    const inserted = await this.tryWriteLog({
-      customerId,
-      merchantId,
-      pointChange: bonus,
-      growthChange: 0,
-      reason: PointReason.ACTIVITY_REVIEW,
-      orderId,
-      activityId: rule.activityId,
-      remark: `${rule.activityName}评价加成`,
+    /**
+     * 读上限与写流水放进同一个事务：评价加成不像下单那样天然带事务，
+     * 不自己开一个的话，同一个人在两台设备上同时提交评价就能各拿一份上限。
+     */
+    return this.dataSource.transaction(async (em) => {
+      const bonus = await this.withinCap(rule, customerId, rule.reviewBonus, em);
+      if (bonus <= 0) {
+        return 0;
+      }
+      const inserted = await this.tryWriteLog(
+        {
+          customerId,
+          merchantId,
+          pointChange: bonus,
+          growthChange: 0,
+          reason: PointReason.ACTIVITY_REVIEW,
+          orderId,
+          activityId: rule.activityId,
+          remark: `${rule.activityName}评价加成`,
+        },
+        em,
+      );
+      return inserted ? bonus : 0;
     });
-    return inserted ? bonus : 0;
   }
 
   /** 退款时把这一单发出去的活动加成按原额扣回 */
@@ -520,12 +529,36 @@ export class MemberService {
    * 上限按「同一个人在这一个活动上净拿到多少分」算，跨商户合计 ——
    * 活动是平台配的，限额防的是刷这个人能薅走的总量，按商户各算一遍等于没限。
    */
-  private async withinCap(rule: ActivityBonusRule, customerId: number, want: number): Promise<number> {
+  private async withinCap(
+    rule: ActivityBonusRule,
+    customerId: number,
+    want: number,
+    em: EntityManager,
+  ): Promise<number> {
     if (rule.perCustomerCap <= 0) {
       return want;
     }
+    // 先锁这个人的账号行，再读已发合计。不锁的话同一顾客的两笔回调会同时读到同一个
+    // 起点、各自按上限发一遍（上限 100 就能实发 200）—— 读合计与写流水必须串行。
+    await this.lockCustomerForAssets(em, customerId);
     const granted = await this.pointActivityService.grantedForCustomer(rule.activityId, customerId);
     return Math.max(0, Math.min(want, rule.perCustomerCap - granted));
+  }
+
+  /**
+   * 对 `customers` 那一行加写锁，把同一个顾客的资金类累加串起来。
+   *
+   * 选账号行而不是会员档案行：账号一定存在（会员档案可能还没建，锁不住不存在的行），
+   * 而且它正好是「同一个人」这个粒度的唯一天然键。
+   */
+  private async lockCustomerForAssets(em: EntityManager, customerId: number): Promise<void> {
+    await em
+      .createQueryBuilder()
+      .select('customer.id', 'id')
+      .from(Customer, 'customer')
+      .where('customer.id = :customerId', { customerId })
+      .setLock('pessimistic_write')
+      .getRawMany();
   }
 
   private async tryWriteLog(
