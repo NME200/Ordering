@@ -7,6 +7,9 @@ import TableEmpty from '@shared/components/TableEmpty.vue';
 import TablePagination from '@shared/components/TablePagination.vue';
 import { useListQuery } from '@shared/hooks/useListQuery';
 import {
+  DiningType,
+  DINING_TYPE_LABELS,
+  DINING_TYPE_OPTIONS,
   ORDER_SOURCE_LABELS,
   ORDER_STATUS_LABELS,
   ORDER_STATUS_OPTIONS,
@@ -59,6 +62,7 @@ const defaultQuery: OrderQuery = {
   merchantId: props.merchantId,
   storeId: props.storeId,
   status: undefined,
+  diningType: undefined,
   keyword: '',
   startTime: undefined,
   endTime: undefined,
@@ -101,6 +105,7 @@ watch(
 const isFiltered = computed(
   () =>
     query.storeId !== undefined ||
+    query.diningType !== undefined ||
     Boolean(query.keyword) ||
     query.status !== undefined ||
     timeRange.value !== null,
@@ -233,10 +238,25 @@ onMounted(async () => {
         <el-option v-for="item in storeOptions" :key="item.id" :label="item.name" :value="item.id" />
       </el-select>
 
+      <el-select
+        v-model="query.diningType"
+        class="filters__field"
+        placeholder="全部就餐方式"
+        clearable
+        @change="search"
+      >
+        <el-option
+          v-for="option in DINING_TYPE_OPTIONS"
+          :key="option.value"
+          :label="option.label"
+          :value="option.value"
+        />
+      </el-select>
+
       <el-input
         v-model="query.keyword"
         class="filters__field"
-        placeholder="搜索订单号 / 手机号"
+        placeholder="搜索订单号 / 手机号 / 取餐码"
         :prefix-icon="Search"
         clearable
         @keyup.enter="search"
@@ -280,6 +300,9 @@ onMounted(async () => {
             <span class="cell-stack__sub">
               {{ row.sourceLabel || ORDER_SOURCE_LABELS[row.source as OrderSource] }}
               <template v-if="row.tableNo"> · 桌号 {{ row.tableNo }}</template>
+              <template v-if="row.pickupCode">
+                · 取餐码 <span class="pickup-code num">{{ row.pickupCode }}</span>
+              </template>
             </span>
           </div>
         </template>
@@ -287,6 +310,12 @@ onMounted(async () => {
 
       <el-table-column label="门店" min-width="140" show-overflow-tooltip>
         <template #default="{ row }">{{ storeName(row.storeId) }}</template>
+      </el-table-column>
+
+      <el-table-column label="就餐" width="96" align="center">
+        <template #default="{ row }">
+          {{ row.diningTypeLabel || DINING_TYPE_LABELS[row.diningType as DiningType] }}
+        </template>
       </el-table-column>
 
       <el-table-column label="商品" min-width="240" show-overflow-tooltip>
@@ -379,7 +408,13 @@ onMounted(async () => {
 
           <el-descriptions :column="2" border size="small" class="detail__desc">
             <el-descriptions-item label="门店">{{ storeName(detailOrder.storeId) }}</el-descriptions-item>
+            <el-descriptions-item label="就餐方式">
+              {{ detailOrder.diningTypeLabel || DINING_TYPE_LABELS[detailOrder.diningType] }}
+            </el-descriptions-item>
             <el-descriptions-item label="桌号">{{ orEmpty(detailOrder.tableNo) }}</el-descriptions-item>
+            <el-descriptions-item label="取餐码">
+              <span class="pickup-code num">{{ orEmpty(detailOrder.pickupCode) }}</span>
+            </el-descriptions-item>
             <el-descriptions-item label="下单人">{{ orEmpty(detailOrder.customerName) }}</el-descriptions-item>
             <el-descriptions-item label="手机号">
               <span class="num">{{ orEmpty(detailOrder.customerPhone) }}</span>
@@ -405,6 +440,13 @@ onMounted(async () => {
                     : `¥ ${fenToYuan(detailOrder.paidAmount)}`
                 }}
               </span>
+            </el-descriptions-item>
+            <el-descriptions-item
+              v-if="detailOrder.diningType === DiningType.DELIVERY"
+              label="收货信息"
+              :span="2"
+            >
+              {{ orEmpty(detailOrder.addressSnapshot) }}
             </el-descriptions-item>
             <el-descriptions-item label="备注" :span="2">
               {{ orEmpty(detailOrder.remark) }}
@@ -527,6 +569,11 @@ onMounted(async () => {
 
 .cell-stack--right {
   align-items: flex-end;
+}
+
+.pickup-code {
+  font-weight: 600;
+  color: var(--brand-700);
 }
 
 /* ---------------- 详情抽屉 ---------------- */

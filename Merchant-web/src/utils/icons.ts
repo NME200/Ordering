@@ -1,6 +1,7 @@
 import {
   Avatar,
   Bowl,
+  Coin,
   DataBoard,
   Discount,
   Document,
@@ -40,6 +41,8 @@ const ICON_REGISTRY: Record<string, Component> = {
   Headset,
   // 「桌码管理」：一张桌一码，用网格表示台位
   Grid,
+  // 「平台积分活动」只读页：分是平台发的，这里只是让商户知道账多出来的一截是谁给的
+  Coin,
 };
 
 /** 按名称取图标组件，未登记时回退到 Files */

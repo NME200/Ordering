@@ -1,9 +1,11 @@
 <script lang="ts">
 import { defineComponent, computed, ref } from 'vue';
+import { IS_DEV } from '@/config/env';
 import { cancelOrder, createPayment, fetchOrder, fetchPaymentChannels, mockChannelPay } from '@/api/public';
 import { cancelMyOrder, fetchCustomerOrder, payMyOrder } from '@/api/customer';
 import { DINING_TYPE_LABEL, useAppStore } from '@/store/app';
 import { useOrderStore, type OrderRef } from '@/store/order';
+import { platformPayChannel } from '@/utils/platform';
 import { Status } from '@/types/order-status';
 import { splitYuan, yuan } from '@/utils/format';
 import type { OrderItem, PublicOrder } from '@/types/api';
@@ -128,15 +130,20 @@ export default defineComponent({
 
     const target = ref<PayTarget | null>(null);
     const channels = ref<{ channel: string; label: string }[]>([]);
+    /** 渠道列表到手之前别说「不支持在线支付」—— 那只是还没问完 */
+    const channelsLoaded = ref(false);
     const chosen = ref('');
     const paying = ref(false);
     const errorText = ref('');
     const statusTip = ref('');
+    /**
+     * 「支付方式」这一整块只在开发环境摆出来当调试用。
+     * 生产环境渠道由平台决定，给顾客看一串选不动的单选框只会添乱。
+     */
+    const showChannels = IS_DEV;
 
     const amount = computed(() => splitYuan(target.value?.payableAmount ?? 0));
     const pieceCount = computed(() => (target.value?.lines ?? []).reduce((sum, line) => sum + line.quantity, 0));
-    /** 只有 mock 渠道在后端真的能走完回调，其余渠道要等真实商户号接入 */
-    const isMock = computed(() => chosen.value === 'mock');
     const diningLabel = computed(() => DINING_BY_VALUE[target.value?.diningType ?? 0] ?? '');
 
     /** 回到订单详情：本机有票据走 orderNo，没有票据走账号归属的 id */
@@ -181,7 +188,18 @@ export default defineComponent({
 
       const list = await fetchPaymentChannels().catch(() => []);
       channels.value = list.filter((item) => item.online).map((item) => ({ channel: item.channel, label: item.label }));
-      chosen.value = channels.value[0]?.channel ?? '';
+      chosen.value = pickChannel(channels.value);
+      channelsLoaded.value = true;
+    }
+
+    /**
+     * 渠道由运行平台决定，不让顾客选：微信小程序就是微信支付，支付宝小程序就是支付宝。
+     * 该渠道没被后端挂载（未配置或实现未接入）时退到第一个在线渠道 —— 本地跑的就是模拟渠道，
+     * 一条链能走完；一个都没有时留空，由界面提示到前台付款。
+     */
+    function pickChannel(list: { channel: string }[]): string {
+      const wanted = platformPayChannel();
+      return (wanted && list.find((item) => item.channel === wanted)?.channel) || list[0]?.channel || '';
     }
 
     /** 支付结果由后端回调推进，前端只能轮询确认；查单 10 次/分，所以最多探 6 次 */
@@ -201,18 +219,23 @@ export default defineComponent({
     async function pay(): Promise<void> {
       const order = target.value;
       if (!order || paying.value || !chosen.value) return;
-      if (!isMock.value) {
-        errorText.value = '该渠道尚未接入小程序，请让店员在收银台为你收款';
-        return;
-      }
       paying.value = true;
       errorText.value = '';
       try {
         const prepay = order.payToken
           ? await createPayment(order.orderId, order.payToken, chosen.value)
           : await payMyOrder(order.orderId, chosen.value);
-        const paymentNo = (prepay as { paymentNo?: string }).paymentNo;
-        if (paymentNo) await mockChannelPay(paymentNo, chosen.value);
+
+        if (chosen.value === 'wechat') {
+          // 微信侧的支付结果以回调为准，requestPayment 成功只代表顾客完成了这一步
+          await requestWechatPay(prepay.payParams ?? {});
+        } else if (chosen.value === 'mock') {
+          // 联调渠道：签名在服务端生成，走一遍与真实渠道完全相同的回调链路
+          if (prepay.paymentNo) await mockChannelPay(prepay.paymentNo, chosen.value);
+        } else {
+          throw new Error('这个平台的在线收款还没有接入，请让店员在收银台为你收款');
+        }
+
         await waitPaid(order);
         backToDetail({ orderNo: order.orderNo, id: order.orderId, payToken: order.payToken });
       } catch (error) {
@@ -220,6 +243,30 @@ export default defineComponent({
       } finally {
         paying.value = false;
       }
+    }
+
+    /**
+     * 唤起微信支付面板。
+     *
+     * 六个参数全部由服务端签好下发（商户私钥绝不出服务端），这里只做透传；
+     * 顾客中途关掉面板算正常行为，提示语不能写成出错。
+     */
+    function requestWechatPay(params: Record<string, unknown>): Promise<void> {
+      return new Promise((resolve, reject) => {
+        uni.requestPayment({
+          provider: 'wxpay',
+          timeStamp: String(params.timeStamp ?? ''),
+          nonceStr: String(params.nonceStr ?? ''),
+          package: String(params.package ?? ''),
+          signType: 'RSA',
+          paySign: String(params.paySign ?? ''),
+          success: () => resolve(),
+          fail: (err: unknown) => {
+            const msg = String((err as { errMsg?: string })?.errMsg ?? '');
+            reject(new Error(/cancel/i.test(msg) ? '支付已取消，这一单还在待支付里，可以再来一次' : msg || '微信支付没有拉起，请重试'));
+          },
+        });
+      });
     }
 
     function cancel(): void {
@@ -251,13 +298,14 @@ export default defineComponent({
       app,
       target,
       channels,
+      channelsLoaded,
       chosen,
       paying,
       errorText,
       statusTip,
+      showChannels,
       amount,
       pieceCount,
-      isMock,
       diningLabel,
       pay,
       cancel,
@@ -323,9 +371,12 @@ export default defineComponent({
         </text>
       </view>
 
-      <view class="section">
-        <text class="section__title">支付方式</text>
-        <view v-if="!channels.length" class="section__empty">当前没有可用支付渠道，请到前台付款</view>
+      <!-- 后端一个在线渠道都没挂载时，这句话生产环境也必须让顾客看到 -->
+      <view v-if="channelsLoaded && !channels.length" class="section__empty">当前不支持在线支付，请到前台付款</view>
+
+      <!-- 生产环境不摆这一块：渠道由运行平台决定，给顾客一排选不动的单选框只会添乱 -->
+      <view v-else-if="channelsLoaded && showChannels" class="section">
+        <text class="section__title">支付方式<text class="section__debug">仅开发环境可见</text></text>
         <view
           v-for="item in channels"
           :key="item.channel"
@@ -542,6 +593,13 @@ export default defineComponent({
     padding: 24rpx 0 4rpx;
     font-size: 28rpx;
     font-weight: 700;
+  }
+
+  &__debug {
+    margin-left: 12rpx;
+    font-size: 20rpx;
+    font-weight: 400;
+    color: var(--ink-2, #{$n-400});
   }
 
   &__empty {

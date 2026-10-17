@@ -193,6 +193,11 @@ export enum Permission {
   MINIAPP_READ = 'miniapp:read',
   /** 小程序配置：修改凭据与扫码规则、生成桌号二维码 */
   MINIAPP_UPDATE = 'miniapp:update',
+
+  /** 积分活动：查看规则与发放统计（商户端读的是「本店参与中」，不是配置权） */
+  POINT_ACTIVITY_READ = 'point-activity:read',
+  /** 积分活动：新建 / 编辑 / 启停 / 删除（平台管理员独占，控制器另有角色硬锁） */
+  POINT_ACTIVITY_UPDATE = 'point-activity:update',
 }
 
 /* ============================================================
@@ -319,6 +324,28 @@ export const ORDER_SOURCE_LABELS: Record<OrderSource, string> = {
   [OrderSource.POS]: '收银台开单',
 };
 
+/**
+ * 就餐方式，与后端 `shared/enums/dining-type.enum.ts` 逐值对齐。
+ *
+ * 只记录与展示：三种方式的菜品与价格完全一致，起送价 / 配送费 / 促销后端没有表支撑，
+ * 所以界面上不要根据它推算任何金额。
+ */
+export enum DiningType {
+  /** 堂食（扫码点餐与收银台开单的默认值） */
+  DINE_IN = 0,
+  /** 到店自提：只有这一类订单会发放取餐码 */
+  PICKUP = 1,
+  /** 外卖配送 */
+  DELIVERY = 2,
+}
+
+/** 就餐方式中文名 */
+export const DINING_TYPE_LABELS: Record<DiningType, string> = {
+  [DiningType.DINE_IN]: '堂食',
+  [DiningType.PICKUP]: '自提',
+  [DiningType.DELIVERY]: '外卖配送',
+};
+
 /** 支付单状态 */
 export enum PaymentStatus {
   /** 待支付 */
@@ -429,6 +456,9 @@ export const ORDER_STATUS_OPTIONS = toOptions<OrderStatus>(ORDER_STATUS_LABELS);
 
 /** 订单来源下拉选项 */
 export const ORDER_SOURCE_OPTIONS = toOptions<OrderSource>(ORDER_SOURCE_LABELS);
+
+/** 就餐方式下拉选项 */
+export const DINING_TYPE_OPTIONS = toOptions<DiningType>(DINING_TYPE_LABELS);
 
 /** 支付状态下拉选项 */
 export const PAYMENT_STATUS_OPTIONS = toOptions<PaymentStatus>(PAYMENT_STATUS_LABELS);
@@ -555,4 +585,6 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
 
   [Permission.MINIAPP_READ]: '查看小程序配置',
   [Permission.MINIAPP_UPDATE]: '修改小程序配置与生成桌号二维码',
+  [Permission.POINT_ACTIVITY_READ]: '查看积分活动与发放统计',
+  [Permission.POINT_ACTIVITY_UPDATE]: '新建 / 编辑 / 启停 / 删除积分活动',
 };

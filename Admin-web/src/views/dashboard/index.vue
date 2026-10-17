@@ -15,6 +15,11 @@ import { useUserStore } from '@/store/modules/user';
 const router = useRouter();
 const userStore = useUserStore();
 
+/** 大屏用新标签页打开：挂墙的屏不该把正在处理的后台页面顶掉 */
+function openScreen(): void {
+  window.open(router.resolve('/screen').href, '_blank', 'noopener');
+}
+
 /**
  * 统计卡片定义。
  *
@@ -147,7 +152,12 @@ onMounted(async () => {
     <PageHeader
       :title="`${greeting}，${userStore.displayName}`"
       :description="`平台治理概览 · 数据范围：${scopeText}`"
-    />
+    >
+      <template #actions>
+        <!-- 大屏用新标签页打开：挂墙的屏不该把正在处理的后台页面顶掉 -->
+        <el-button plain @click="openScreen">平台大屏</el-button>
+      </template>
+    </PageHeader>
 
     <!-- 统计卡片 -->
     <section class="stats">

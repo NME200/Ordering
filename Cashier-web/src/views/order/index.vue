@@ -19,6 +19,9 @@ import TablePagination from '@shared/components/TablePagination.vue';
 import { useListQuery } from '@shared/hooks/useListQuery';
 import { useUserStore } from '@/store/modules/user';
 import {
+  DiningType,
+  DINING_TYPE_LABELS,
+  DINING_TYPE_OPTIONS,
   OrderStatus,
   ORDER_STATUS_LABELS,
   ORDER_STATUS_OPTIONS,
@@ -90,6 +93,7 @@ const defaultQuery: OrderQuery = {
   page: 1,
   pageSize: 12,
   status: undefined,
+  diningType: undefined,
   keyword: '',
   startTime: undefined,
   endTime: undefined,
@@ -115,7 +119,11 @@ watch(todayOnly, (value) => {
 });
 
 const isFiltered = computed(
-  () => Boolean(query.keyword) || query.status !== undefined || todayOnly.value,
+  () =>
+    Boolean(query.keyword) ||
+    query.status !== undefined ||
+    query.diningType !== undefined ||
+    todayOnly.value,
 );
 
 function handlePageChange(page: number): void {
@@ -385,10 +393,25 @@ onBeforeUnmount(() => {
     </div>
 
     <div class="orders__filters">
+      <el-select
+        v-model="query.diningType"
+        class="orders__dining"
+        placeholder="全部就餐方式"
+        clearable
+        @change="search"
+      >
+        <el-option
+          v-for="option in DINING_TYPE_OPTIONS"
+          :key="option.value"
+          :label="option.label"
+          :value="option.value"
+        />
+      </el-select>
+
       <el-input
         v-model="query.keyword"
         class="orders__search"
-        placeholder="订单号 / 手机号"
+        placeholder="订单号 / 手机号 / 取餐码"
         :prefix-icon="Search"
         clearable
         @keyup.enter="search"
@@ -410,7 +433,11 @@ onBeforeUnmount(() => {
             <div class="ocard__id">
               <span class="num ocard__no">{{ rowAt(index).orderNo }}</span>
               <span class="ocard__src">
-                {{ rowAt(index).sourceLabel }}
+                {{ rowAt(index).sourceLabel }} ·
+                {{
+                  rowAt(index).diningTypeLabel ||
+                  DINING_TYPE_LABELS[rowAt(index).diningType as DiningType]
+                }}
                 <template v-if="rowAt(index).tableNo"> · 桌号 {{ rowAt(index).tableNo }}</template>
                 <template v-if="rowAt(index).pickupCode">
                   · 取餐码 <span class="num pickup-code">{{ rowAt(index).pickupCode }}</span>
@@ -516,6 +543,9 @@ onBeforeUnmount(() => {
           </div>
 
           <el-descriptions :column="2" border size="small">
+            <el-descriptions-item label="就餐方式">{{
+              detailOrder.diningTypeLabel || DINING_TYPE_LABELS[detailOrder.diningType]
+            }}</el-descriptions-item>
             <el-descriptions-item label="桌号">{{
               orEmpty(detailOrder.tableNo)
             }}</el-descriptions-item>
@@ -542,6 +572,13 @@ onBeforeUnmount(() => {
                     : `¥ ${fenToYuan(detailOrder.paidAmount)}`
                 }}
               </span>
+            </el-descriptions-item>
+            <el-descriptions-item
+              v-if="detailOrder.diningType === DiningType.DELIVERY"
+              label="收货信息"
+              :span="2"
+            >
+              {{ orEmpty(detailOrder.addressSnapshot) }}
             </el-descriptions-item>
             <el-descriptions-item label="备注" :span="2">{{
               orEmpty(detailOrder.remark)
@@ -599,6 +636,10 @@ onBeforeUnmount(() => {
 
   &__search {
     width: 236px;
+  }
+
+  &__dining {
+    width: 148px;
   }
 
   &__body {

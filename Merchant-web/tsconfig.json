@@ -23,6 +23,8 @@
       "pinia": ["./node_modules/pinia"],
       "axios": ["./node_modules/axios"],
       "element-plus": ["./node_modules/element-plus"],
+      "echarts": ["./node_modules/echarts"],
+      "echarts/*": ["./node_modules/echarts/*"],
       "element-plus/*": ["./node_modules/element-plus/*"],
       "@element-plus/icons-vue": ["./node_modules/@element-plus/icons-vue"]
     },

@@ -4,13 +4,16 @@ import DiyBenefitGrid from '@/components/diy/DiyBenefitGrid.vue';
 import DiyFooterButton from '@/components/diy/DiyFooterButton.vue';
 import DiyMemberCard from '@/components/diy/DiyMemberCard.vue';
 import DiyTaskList from '@/components/diy/DiyTaskList.vue';
-import { fetchMember } from '@/api/customer';
+import { fetchMember, fetchPointLogs } from '@/api/customer';
+import { fetchPointActivity } from '@/api/public';
 import { useAppStore } from '@/store/app';
 import { useCustomerStore } from '@/store/customer';
 import { getLastMerchantId } from '@/utils/auth';
+import { dayClock } from '@/utils/format';
 import { openLink } from '@/utils/nav';
 import type { SectionKey } from '@/types/api';
-import type { MemberAsset, MemberTask } from '@/types/customer';
+import type { PublicPointActivityBanner } from '@/types/api';
+import type { MemberAsset, MemberTask, PointLog } from '@/types/customer';
 
 /** 这一版小程序认识的会员卡页组件；白名单外的 key 整块跳过，装修端加新组件不会打挂老版本 */
 const KNOWN_KEYS: SectionKey[] = ['memberCard', 'benefitGrid', 'taskList', 'footerButton'];
@@ -37,6 +40,10 @@ export default defineComponent({
     const merchantId = ref(0);
     const showInvite = ref(false);
     const loaded = ref(false);
+    /** 平台积分活动条。没进店（没有 storeId）/ 没活动 / 接口失败都是 null，整块不渲染 */
+    const activity = ref<PublicPointActivityBanner | null>(null);
+    /** 积分明细：后端只给「变动 / 变动后余额 / 说明 / 时间」四件事实，界面不汇总不预测 */
+    const logs = ref<PointLog[]>([]);
 
     const sections = computed(() =>
       app.sectionsOf('card').filter((item) => (KNOWN_KEYS as readonly string[]).includes(item.key)),
@@ -51,12 +58,22 @@ export default defineComponent({
     const inviteCount = computed(() => customer.profile?.inviteCount ?? 0);
 
     async function load(): Promise<void> {
+      /**
+       * 活动条按门店问（公开接口只认 storeId，与菜单同一个形状）。
+       *
+       * 没进店就没有 storeId，也就没有活动条 —— 规则是「这个商户这一段时间」的事，
+       * 拿不到上下文时宁可什么都不显示，不能猜一家店的活动贴上去。
+       */
+      const storeId = app.store?.id ?? 0;
+      activity.value = storeId ? await fetchPointActivity(storeId).catch(() => null) : null;
+
       const id = customer.member?.merchantId ?? getLastMerchantId();
       merchantId.value = id || 0;
       await customer.refresh(id || undefined);
       if (!id) {
         asset.value = null;
         tasks.value = [];
+        logs.value = [];
         loaded.value = true;
         return;
       }
@@ -71,6 +88,13 @@ export default defineComponent({
       } finally {
         loaded.value = true;
       }
+      /**
+       * 明细单独取，且失败不挡卡面。
+       *
+       * 「我的分哪来的」是顾客问得最多的一类问题，而这份账后端一直有（`point_logs`），
+       * 之前只是没有任何页面读它 —— 活动加成发出去了顾客只看得到数字变大，说不清来源。
+       */
+      logs.value = await fetchPointLogs(id).catch(() => []);
     }
 
     /**
@@ -128,6 +152,9 @@ export default defineComponent({
       tasks,
       loaded,
       merchantId,
+      activity,
+      logs,
+      dayClock,
       showInvite,
       inviteCode,
       inviteCount,
@@ -155,6 +182,15 @@ export default defineComponent({
 
 <template>
   <view class="card-page" :style="app.cssVars">
+    <!-- 平台积分活动条：没活动、没配文案或接口失败时整块不渲染，不留灰框占位 -->
+    <view v-if="activity" class="activity card">
+      <text class="activity__title">{{ activity.title }}</text>
+      <text v-if="activity.description" class="activity__desc">{{ activity.description }}</text>
+      <text class="activity__note">
+        {{ activity.ruleTypeLabel }} · {{ dayClock(activity.endTime) }} 结束，加成的积分直接进你在本店的账户
+      </text>
+    </view>
+
     <block v-for="item in sections" :key="item.id">
       <view class="card-page__block">
         <DiyMemberCard
@@ -197,6 +233,23 @@ export default defineComponent({
       <text class="tip__text">还没进店，会员档案是按商户建的。先扫桌码或从首页选一家店，这里就会出现你的等级与成长值。</text>
     </view>
 
+    <!-- 积分明细：一条流水都没有就整块不出现，不留「暂无记录」的空框 -->
+    <view v-if="logs.length" class="logs card">
+      <view class="logs__head">
+        <text class="logs__title">积分明细</text>
+        <text class="logs__note">本店最近 {{ logs.length }} 条，别的店的分不在这里</text>
+      </view>
+      <view v-for="(item, index) in logs" :key="index" class="log">
+        <view class="log__body">
+          <text class="log__reason">{{ item.reason }}</text>
+          <text class="log__meta num">{{ dayClock(item.createdAt) }} · 变动后 {{ item.pointAfter }} 分</text>
+        </view>
+        <text class="log__change num" :class="{ 'log__change--minus': item.pointChange < 0 }">
+          {{ item.pointChange > 0 ? '+' : '' }}{{ item.pointChange }}
+        </text>
+      </view>
+    </view>
+
     <view v-if="showInvite" class="sheet-mask" @click="showInvite = false">
       <view class="sheet" @click.stop>
         <view class="sheet__handle" />
@@ -231,6 +284,95 @@ export default defineComponent({
 /* 每一块都带页边距与卡片间距：卡面在参考稿里也是一张带边距的实体卡，不是通栏头图 */
 .card-page__block {
   padding: var(--card-gap, 8px) var(--content-pad, 28rpx) 0;
+}
+
+/* 平台积分活动条：容器复用全局 .card（毛玻璃 + 主题圆角），这里只排文字 */
+.activity {
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+  margin: 0 var(--content-pad, 28rpx);
+  padding: 22rpx 24rpx;
+}
+
+.activity__title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--brand, #c8752b);
+}
+
+.activity__desc {
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: var(--ink, #{$n-900});
+}
+
+.activity__note {
+  font-size: 22rpx;
+  line-height: 1.6;
+  color: var(--ink-2, #{$n-500});
+}
+
+/* 明细是一页里唯一的账目区：内容铺在卡片上，行间只用极细分割线，不画卡中卡 */
+.logs {
+  margin: var(--card-gap, 8px) var(--content-pad, 28rpx) 0;
+  padding: 4rpx 24rpx;
+}
+
+.logs__head {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+  padding: 20rpx 0 12rpx;
+}
+
+.logs__title {
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.logs__note {
+  font-size: 22rpx;
+  color: var(--ink-2, #{$n-500});
+}
+
+.log {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+  padding: 18rpx 0;
+  border-top: 1rpx solid var(--divider, #{$n-100});
+}
+
+.log__body {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+  min-width: 0;
+}
+
+.log__reason {
+  font-size: 24rpx;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.log__meta {
+  font-size: 20rpx;
+  color: var(--ink-2, #{$n-500});
+}
+
+.log__change {
+  flex-shrink: 0;
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--brand, #c8752b);
+}
+
+/* 扣回要让顾客一眼看出是少了的，但不做成红色警告：那是系统正常的退款动作，不是出错 */
+.log__change--minus {
+  color: var(--ink-2, #{$n-500});
 }
 
 .tip {

@@ -7,6 +7,7 @@
   "//": "本包刻意不构建、不安装依赖：各前端通过 tsconfig paths + Vite alias 以 `@shared/*` 直接引用 src 下的源码。这样可避免 Vite 去预打包 node_modules 里的 .vue 文件，也绕开本机 safe-delete 钩子对依赖缓存重建的拦截。",
   "peerDependencies": {
     "axios": "^1.20.0",
+    "echarts": "^6.1.0",
     "element-plus": "^2.14.7",
     "pinia": "^4.0.3",
     "vue": "^3.5.43",

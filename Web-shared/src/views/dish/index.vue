@@ -8,6 +8,7 @@ import { fetchMerchantOptions } from '../../api/merchant';
 import { fetchSpecGroupOptions } from '../../api/spec-group';
 import { fetchStores } from '../../api/store';
 import { resetStoreDish, upsertStoreDish } from '../../api/store-dish';
+import ImageUploadField from '../../components/ImageUploadField.vue';
 import PageHeader from '../../components/PageHeader.vue';
 import StatusTag from '../../components/StatusTag.vue';
 import TableEmpty from '../../components/TableEmpty.vue';
@@ -274,7 +275,21 @@ const rules = computed<FormRules<DishForm>>(() => ({
   description: [{ max: 255, message: '菜品描述最长 255 个字符', trigger: 'blur' }],
   imageUrl: [
     { max: 255, message: '图片地址最长 255 个字符', trigger: 'blur' },
-    { type: 'url', message: '图片地址需为合法的 URL', trigger: 'blur' },
+    {
+      /**
+       * 刻意不用 `type: 'url'`：async-validator 那条正则要求主机名带顶级域，
+       * 后端自己托管的图片（`http://localhost:3100/...`、内网 IP）会被判成非法，
+       * 表现就是「图传上去了、点保存却报错」。与后端 DTO 同一把尺。
+       */
+      validator: (_rule: unknown, value: string, callback: (error?: Error) => void) => {
+        if (!value || /^https?:\/\//i.test(value)) {
+          callback();
+          return;
+        }
+        callback(new Error('图片地址需以 http:// 或 https:// 开头'));
+      },
+      trigger: 'blur',
+    },
   ],
   priceYuan: [{ required: true, message: '请输入售价', trigger: 'change' }],
   unit: [{ max: 8, message: '计价单位最长 8 个字符', trigger: 'blur' }],
@@ -286,32 +301,25 @@ function handleDialogOpened(): void {
   formRef.value?.clearValidate();
 }
 
-/** 平台管理员换商户后，分类与规格组都必须重新加载（跨商户引用会被后端拒绝） */
-watch(
-  () => form.merchantId,
-  async (merchantId, previous) => {
-    if (!dialogVisible.value || merchantId === previous) {
-      return;
-    }
-    form.categoryId = undefined;
-    form.specGroupIds = [];
-    await loadFormOptions(isPlatformAdmin.value ? merchantId : undefined, form.storeId);
-  },
-);
+/**
+ * 下面两个「范围变化」的处理挂在 select 的 @change 上，不用 watch：
+ * 这两个字段在 openCreate/openEdit 里也会被赋值，而 watch 的回调在赋值之后才 flush，
+ * 于是「一打开编辑弹窗就被判定成用户换了商户」，分类和规格组被清空，保存卡在「请选择所属分类」。
+ * 只有真正的用户操作才需要重取选项，select 的 @change 正好是这个语义。
+ */
+async function handleFormMerchantChange(): Promise<void> {
+  form.categoryId = undefined;
+  form.specGroupIds = [];
+  await loadFormOptions(isPlatformAdmin.value ? form.merchantId : undefined, form.storeId);
+}
 
 /** 换归属门店后重取分类：店专属分类只在该店可选，已选分类可能失效 */
-watch(
-  () => form.storeId,
-  async (storeId, previous) => {
-    if (!dialogVisible.value || storeId === previous) {
-      return;
-    }
-    await loadFormOptions(isPlatformAdmin.value ? form.merchantId : undefined, storeId);
-    if (form.categoryId && !formCategoryOptions.value.some((item) => item.id === form.categoryId)) {
-      form.categoryId = undefined;
-    }
-  },
-);
+async function handleFormStoreChange(): Promise<void> {
+  await loadFormOptions(isPlatformAdmin.value ? form.merchantId : undefined, form.storeId);
+  if (form.categoryId && !formCategoryOptions.value.some((item) => item.id === form.categoryId)) {
+    form.categoryId = undefined;
+  }
+}
 
 async function openCreate(): Promise<void> {
   Object.assign(form, createEmptyForm());
@@ -354,7 +362,9 @@ async function handleSave(): Promise<void> {
     categoryId: form.categoryId as number,
     name: form.name.trim(),
     description: form.description.trim() || undefined,
-    imageUrl: form.imageUrl.trim() || undefined,
+    // 空值必须发 null：service 按「字段是否出现」决定改不改，
+    // 发 undefined 等于「本次没动它」，界面上点了「清除图片」也不会真的清掉
+    imageUrl: form.imageUrl.trim() || null,
     price: yuanToFen(form.priceYuan ?? 0),
     memberPrice:
       form.memberPriceYuan === undefined || form.memberPriceYuan === null
@@ -834,14 +844,27 @@ onMounted(async () => {
     >
       <el-form ref="formRef" :model="form" :rules="rules" label-width="92px">
         <el-form-item v-if="isPlatformAdmin && form.id === null" label="所属商户" prop="merchantId">
-          <el-select v-model="form.merchantId" placeholder="请选择商户" filterable style="width: 100%">
+          <el-select
+            v-model="form.merchantId"
+            placeholder="请选择商户"
+            filterable
+            style="width: 100%"
+            @change="handleFormMerchantChange"
+          >
             <el-option v-for="item in merchantOptions" :key="item.id" :label="item.name" :value="item.id" />
           </el-select>
           <p class="form-hint">平台管理员需指定菜品归属的商户，创建后不可跨商户迁移。</p>
         </el-form-item>
 
         <el-form-item v-if="form.id === null && showStoreFilter" label="归属门店">
-          <el-select v-model="form.storeId" placeholder="全商户通用" clearable filterable style="width: 100%">
+          <el-select
+            v-model="form.storeId"
+            placeholder="全商户通用"
+            clearable
+            filterable
+            style="width: 100%"
+            @change="handleFormStoreChange"
+          >
             <el-option v-for="item in storeOptions" :key="item.id" :label="item.name" :value="item.id" />
           </el-select>
           <p class="form-hint">
@@ -883,8 +906,12 @@ onMounted(async () => {
           />
         </el-form-item>
 
-        <el-form-item label="图片地址" prop="imageUrl">
-          <el-input v-model="form.imageUrl" placeholder="选填，完整 URL，例如 https://cdn.example.com/dish/1.jpg" />
+        <el-form-item label="图片" prop="imageUrl">
+          <ImageUploadField
+            v-model="form.imageUrl"
+            placeholder="选填，完整 URL，或直接上传本地图片"
+            hint="留空则列表与顾客端显示占位图。支持 JPG / PNG / GIF / WebP，单张不超过 2MB"
+          />
         </el-form-item>
 
         <el-form-item label="售价" prop="priceYuan">

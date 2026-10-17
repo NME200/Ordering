@@ -20,6 +20,9 @@ import TablePagination from '@shared/components/TablePagination.vue';
 import { useListQuery } from '@shared/hooks/useListQuery';
 import { useUserStore } from '@/store/modules/user';
 import {
+  DiningType,
+  DINING_TYPE_LABELS,
+  DINING_TYPE_OPTIONS,
   OrderSource,
   OrderStatus,
   ORDER_SOURCE_LABELS,
@@ -98,6 +101,7 @@ const defaultQuery: OrderQuery = {
   pageSize: 10,
   storeId: undefined,
   status: undefined,
+  diningType: undefined,
   keyword: '',
   startTime: undefined,
   endTime: undefined,
@@ -132,6 +136,7 @@ const isFiltered = computed(
   () =>
     Boolean(query.keyword) ||
     query.status !== undefined ||
+    query.diningType !== undefined ||
     query.storeId !== undefined ||
     timeRange.value !== null,
 );
@@ -357,10 +362,25 @@ onMounted(async () => {
           <el-option v-for="item in storeOptions" :key="item.id" :label="item.name" :value="item.id" />
         </el-select>
 
+        <el-select
+          v-model="query.diningType"
+          class="filters__field"
+          placeholder="全部就餐方式"
+          clearable
+          @change="search"
+        >
+          <el-option
+            v-for="option in DINING_TYPE_OPTIONS"
+            :key="option.value"
+            :label="option.label"
+            :value="option.value"
+          />
+        </el-select>
+
         <el-input
           v-model="query.keyword"
           class="filters__field"
-          placeholder="搜索订单号 / 手机号"
+          placeholder="搜索订单号 / 手机号 / 取餐码"
           :prefix-icon="Search"
           clearable
           @keyup.enter="search"
@@ -400,6 +420,12 @@ onMounted(async () => {
 
         <el-table-column v-if="showStoreFilter" label="门店" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">{{ storeName(row.storeId) }}</template>
+        </el-table-column>
+
+        <el-table-column label="就餐" width="96" align="center">
+          <template #default="{ row }">
+            {{ row.diningTypeLabel || DINING_TYPE_LABELS[row.diningType as DiningType] }}
+          </template>
         </el-table-column>
 
         <el-table-column label="商品" min-width="240" show-overflow-tooltip>
@@ -510,6 +536,9 @@ onMounted(async () => {
 
           <el-descriptions :column="2" border size="small" class="detail__desc">
             <el-descriptions-item label="门店">{{ storeName(detailOrder.storeId) }}</el-descriptions-item>
+            <el-descriptions-item label="就餐方式">
+              {{ detailOrder.diningTypeLabel || DINING_TYPE_LABELS[detailOrder.diningType] }}
+            </el-descriptions-item>
             <el-descriptions-item label="桌号">{{ orEmpty(detailOrder.tableNo) }}</el-descriptions-item>
             <el-descriptions-item label="取餐码">
               <span class="pickup-code num">{{ orEmpty(detailOrder.pickupCode) }}</span>
@@ -521,6 +550,14 @@ onMounted(async () => {
             <el-descriptions-item label="下单来源">{{ detailOrder.sourceLabel }}</el-descriptions-item>
             <el-descriptions-item label="操作人">
               {{ orEmpty(detailOrder.createdByName) }}
+            </el-descriptions-item>
+            <!-- 只在外卖单出现：堂食有桌号、自提有取餐码，摆一行空地址只会让人以为配送信息丢了 -->
+            <el-descriptions-item
+              v-if="detailOrder.diningType === DiningType.DELIVERY"
+              label="收货信息"
+              :span="2"
+            >
+              {{ orEmpty(detailOrder.addressSnapshot) }}
             </el-descriptions-item>
             <el-descriptions-item label="商品总额">
               <span class="num">¥ {{ fenToYuan(detailOrder.totalAmount) }}</span>

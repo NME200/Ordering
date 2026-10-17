@@ -17,6 +17,11 @@ import { OrderStatus, ORDER_STATUS_LABELS, Permission } from '@shared/types/enum
 const router = useRouter();
 const userStore = useUserStore();
 
+/** 大屏用新标签页打开：挂墙的屏不该把正在处理的后台页面顶掉 */
+function openScreen(): void {
+  window.open(router.resolve('/screen').href, '_blank', 'noopener');
+}
+
 /* ---------------- 待处理订单 ---------------- */
 
 /**
@@ -175,7 +180,12 @@ onMounted(async () => {
             ? `当前有 ${pendingTotal} 笔订单需要处理`
             : '当前没有待处理订单，一切正常'
       "
-    />
+    >
+      <template #actions>
+        <!-- 大屏是新标签页打开：挂墙的屏不该把正在处理的后台页面顶掉 -->
+        <el-button plain @click="openScreen">数据大屏</el-button>
+      </template>
+    </PageHeader>
 
     <!-- 待处理订单：商户每天最先要看的东西 -->
     <section class="panel order-board">

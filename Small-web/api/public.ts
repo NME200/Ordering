@@ -16,6 +16,7 @@ import type {
   PrepayResult,
   PublicMenu,
   PublicOrder,
+  PublicPointActivityBanner,
   PublicStore,
   PublicStoreListItem,
 } from '@/types/api';
@@ -48,6 +49,18 @@ export function fetchStore(storeId: number): Promise<PublicStore> {
 
 export function fetchMenu(storeId: number): Promise<PublicMenu> {
   return request<PublicMenu>(`/public/stores/${storeId}/menu`);
+}
+
+/**
+ * 本店此刻生效的平台积分活动条（限流 60 次/分）。
+ *
+ * 失败与「没有活动」在界面上是同一种表现：整块不渲染。
+ * 所以这里必须 silent —— 顾客不该因为平台没做活动就看到一个报错 toast。
+ */
+export function fetchPointActivity(storeId: number): Promise<PublicPointActivityBanner | null> {
+  return request<PublicPointActivityBanner | null>(`/public/stores/${storeId}/point-activity`, {
+    silent: true,
+  });
 }
 
 export function createOrder(payload: CreateOrderPayload): Promise<CreateOrderResult> {

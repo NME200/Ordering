@@ -37,6 +37,7 @@ import type {
   ServiceMessage,
   ServiceSession,
 } from '@/types/customer';
+import type { PrepayResult } from '@/types/api';
 
 export interface SessionResult {
   accessToken: string;
@@ -181,8 +182,8 @@ export function cancelMyOrder(id: number): Promise<CustomerOrder> {
 }
 
 /** 为自己的订单发起支付：不需要 payToken，归属由账号证明，所以换设备也付得了 */
-export function payMyOrder(id: number, channel = 'mock'): Promise<unknown> {
-  return request<unknown>(`/customer/orders/${id}/pay`, { method: 'POST', data: { channel } });
+export function payMyOrder(id: number, channel: string): Promise<PrepayResult> {
+  return request<PrepayResult>(`/customer/orders/${id}/pay`, { method: 'POST', data: { channel } });
 }
 
 export function fetchMember(merchantId: number): Promise<{

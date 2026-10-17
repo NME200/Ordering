@@ -1,6 +1,7 @@
 import {
   Avatar,
   Brush,
+  Coin,
   CreditCard,
   DataBoard,
   Files,
@@ -30,6 +31,8 @@ const ICON_REGISTRY: Record<string, Component> = {
   CreditCard,
   Brush,
   Ticket,
+  // 「积分活动」菜单
+  Coin,
   // 「系统设置」一级菜单与它下面的「小程序配置」
   Setting,
   Tools,

@@ -4,6 +4,7 @@ import { Plus, Refresh, Search } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus';
 import { fetchMerchantOptions } from '../../api/merchant';
 import { createStore, fetchStores, removeStore, updateStore, updateStoreStatus } from '../../api/store';
+import ImageUploadField from '../../components/ImageUploadField.vue';
 import PageHeader from '../../components/PageHeader.vue';
 import StatusTag from '../../components/StatusTag.vue';
 import TableEmpty from '../../components/TableEmpty.vue';
@@ -530,7 +531,11 @@ onMounted(async () => {
         </el-form-item>
 
         <el-form-item label="门店 logo" prop="logo">
-          <el-input v-model="form.logo" placeholder="图片地址 https://… 留空则顾客端用店名首字" clearable />
+          <ImageUploadField
+            v-model="form.logo"
+            placeholder="图片地址，或直接上传本地图片"
+            hint="留空则顾客端用店名首字兜底。支持 JPG / PNG / GIF / WebP，单张不超过 2MB"
+          />
         </el-form-item>
         <el-form-item label="营业时间" prop="businessHours">
           <el-input v-model="form.businessHours" placeholder="如 09:00-21:00，只做展示" clearable />

@@ -1,5 +1,5 @@
 import type { PaginationQuery } from './api';
-import type { OrderSource, OrderStatus } from './enums';
+import type { DiningType, OrderSource, OrderStatus } from './enums';
 
 /**
  * 订单相关类型 —— 与后端 `modules/order/dto` 对齐。
@@ -64,6 +64,14 @@ export interface Order {
   tableNo: string | null;
   /** 取餐码：仅自提单有，顾客在柜台前报的就是它，店员按它找单 */
   pickupCode: string | null;
+  /**
+   * 就餐方式。POS 单恒为堂食（店员当面点的单不需要选）；
+   * C 端扫码单由顾客在首页选，服务端只记录与展示、不改价。
+   */
+  diningType: DiningType;
+  diningTypeLabel: string;
+  /** 收货信息快照：仅外卖单有，按「姓名 电话 详细地址」拼好，店员按它送 */
+  addressSnapshot: string | null;
   remark: string | null;
   paidAt: string | null;
   acceptedAt: string | null;
@@ -83,7 +91,9 @@ export interface OrderQuery extends PaginationQuery {
   /** 门店管理员会被服务端强制限定为本店 */
   storeId?: number;
   status?: OrderStatus;
-  /** 按订单号 / 手机号模糊搜索 */
+  /** 就餐方式筛选；undefined 表示不限（堂食是 0，不能用 0 当「全部」） */
+  diningType?: DiningType;
+  /** 按订单号 / 手机号 / 取餐码模糊搜索 */
   keyword?: string;
   /** 下单时间起（ISO 8601） */
   startTime?: string;

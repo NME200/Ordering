@@ -397,3 +397,22 @@ export interface CreateOrderPayload {
   /** 收货地址 ID（外卖配送单） */
   addressId?: number;
 }
+
+/* ---------------- 平台积分活动条 ---------------- */
+
+/**
+ * 本店此刻生效的平台积分活动（`GET /public/stores/:storeId/point-activity`）。
+ *
+ * 后端只给**事实文案**，不给倍率数字：顾客拿多少分一律服务端算，
+ * 把百分比下发到小程序只会多出一个能被改显示的假口径。
+ * 没有活动、或活动没配活动条文案时后端回 null，这一整块就不渲染。
+ */
+export interface PublicPointActivityBanner {
+  id: number;
+  name: string;
+  ruleType: string;
+  ruleTypeLabel: string;
+  title: string;
+  description: string | null;
+  endTime: string;
+}

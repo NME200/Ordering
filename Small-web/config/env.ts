@@ -8,10 +8,10 @@
 /** 后端 API 前缀，见 ordering-serve/src/main.ts 的 API_PREFIX */
 const API_PATH = '/api/v1';
 
-const DEV_ORIGIN = 'http://127.0.0.1:3100';
+const DEV_ORIGIN = 'http://localhost:3100';
 
 /** 发行前必须替换：微信公众平台「开发设置 → 服务器域名」里也要加同一条 */
-const PROD_ORIGIN = 'https://api.example.com';
+const PROD_ORIGIN = 'http://localhost:3100';
 
 /** 开发版 / 体验版小程序连本地后端时，需要在开发者工具里关掉「校验合法域名」 */
 export const IS_DEV = process.env.NODE_ENV !== 'production';

@@ -65,7 +65,8 @@ export interface CreateDishPayload {
   storeId?: number;
   name: string;
   description?: string;
-  imageUrl?: string;
+  /** 图片地址；传 null 表示清除（不传 = 保持原值，编辑时这两者不是一回事） */
+  imageUrl?: string | null;
   /** 售价（分） */
   price: number;
   /** 会员价（分）；传 null 表示不区分会员价 */

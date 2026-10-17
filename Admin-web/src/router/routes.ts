@@ -87,6 +87,16 @@ export const menuRoutes: RouteRecordRaw[] = [
     },
   },
   {
+    path: 'point-activities',
+    name: 'PointActivities',
+    component: () => import('@/views/point-activity/index.vue'),
+    meta: {
+      title: '积分活动',
+      icon: 'Coin',
+      permission: Permission.POINT_ACTIVITY_READ,
+    },
+  },
+  {
     path: 'customers',
     name: 'CustomerList',
     component: () => import('@/views/customer/index.vue'),
@@ -229,6 +239,13 @@ export const routes: RouteRecordRaw[] = [
     name: 'Login',
     component: () => import('@/views/login/index.vue'),
     meta: { title: '登录', requiresAuth: false, hidden: true },
+  },
+  {
+    path: '/screen',
+    name: 'DataScreen',
+    component: () => import('@/views/screen/index.vue'),
+    // 挂在布局之外：大屏要整块 16:9，侧边栏与面包屑只会吃掉一截画面
+    meta: { title: '平台经营大屏', requiresAuth: true, hidden: true },
   },
   {
     path: '/',

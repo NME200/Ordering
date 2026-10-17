@@ -74,6 +74,12 @@ export const menuRoutes: RouteRecordRaw[] = [
     component: () => import('@/views/coupon/index.vue'),
     meta: { title: '优惠券', icon: 'Discount', permission: Permission.COUPON_READ },
   },
+  {
+    path: 'point-activities',
+    name: 'PointActivityList',
+    component: () => import('@/views/point-activity/index.vue'),
+    meta: { title: '积分活动', icon: 'Coin', permission: Permission.POINT_ACTIVITY_READ },
+  },
   // 顾客名册不在商家端：账号是全平台账号，封禁与解封归平台管。
   // 商家看得到的是自己这一侧的履约数据 —— 评价、开票、客服、券。
   {
@@ -148,6 +154,13 @@ export const routes: RouteRecordRaw[] = [
     name: 'Login',
     component: () => import('@/views/login/index.vue'),
     meta: { title: '登录', requiresAuth: false, hidden: true },
+  },
+  {
+    path: '/screen',
+    name: 'DataScreen',
+    component: () => import('@/views/screen/index.vue'),
+    // 挂在布局之外：大屏要的是整块 16:9，侧边栏和面包屑在上面只会占掉一截画面
+    meta: { title: '数据大屏', requiresAuth: true, hidden: true },
   },
   {
     path: '/',

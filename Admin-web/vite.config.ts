@@ -19,6 +19,13 @@ const OPTIMIZE_DEPS = [
   'vue-router',
   'pinia',
   'axios',
+  // 数据大屏：Web-shared 里的 ScreenChart 引的是 echarts 的按需子入口。
+  // 与 axios 同一条理由 —— 根目录之外的共享源码用到的依赖必须在这里列出，
+  // 否则 Vite 不会替它解析，页面直接报 Failed to resolve import "echarts/charts"。
+  'echarts/core',
+  'echarts/charts',
+  'echarts/components',
+  'echarts/renderers',
   'element-plus',
   'element-plus/es',
   '@element-plus/icons-vue',
@@ -43,6 +50,8 @@ const OPTIMIZE_DEPS = [
   'element-plus/es/components/form-item/style/css',
   'element-plus/es/components/icon/style/css',
   'element-plus/es/components/image/style/css',
+  // el-image 的开图预览（ImageUploadField 与菜品/门店列表都在用）会单独引这个样式入口
+  'element-plus/es/components/image-viewer/style/css',
   'element-plus/es/components/input/style/css',
   'element-plus/es/components/input-number/style/css',
   // v-loading 指令会引入 loading 的样式入口
