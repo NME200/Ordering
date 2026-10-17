@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import ScreenChart from '@shared/components/screen/ScreenChart.vue';
+import ScreenChart from '@/components/ScreenChart.vue';
 import ScreenPanel from '@shared/components/screen/ScreenPanel.vue';
 import ScreenShell from '@shared/components/screen/ScreenShell.vue';
 import { fetchPlatformScreen } from '@shared/api/statistics';
@@ -14,7 +14,7 @@ import type { EChartsOption } from 'echarts';
  * 与商家屏同一套外壳与色板，但排行换成商户维度，并多出支付渠道占比 ——
  * 平台关心钱从哪个渠道进来（真实渠道接了几个、还有多少在走线下）。
  */
-const { data, error, updatedAt } = useScreenPolling(fetchPlatformScreen);
+const { data, error, updatedAt, firstLoad } = useScreenPolling(fetchPlatformScreen);
 
 const INK = '#e8eefb';
 const INK_DIM = '#8fa0c0';
@@ -56,24 +56,29 @@ const axisBase = {
   axisLabel: { color: INK_DIM, fontSize: 12 },
 };
 
+/** 金额轴一律按分参与计算、按元显示：中途四舍五入会让排行与顶部 KPI 卡差几分钱 */
+const yuanAxisLabel = { color: INK_DIM, formatter: (value: number) => `¥${fenToYuan(Number(value))}` };
+const yuanValueFormatter = (value: unknown) => `¥${fenToYuan(Number(value))}`;
+
 const trendOption = computed<EChartsOption>(() => {
   const rows = data.value?.trend ?? [];
   return {
     grid: { left: 72, right: 52, top: 34, bottom: 28 },
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    legend: { data: ['实收（元）', '单量'], textStyle: { color: INK_DIM, fontSize: 12 }, top: 0, right: 0 },
+    legend: { data: ['实收', '单量'], textStyle: { color: INK_DIM, fontSize: 12 }, top: 0, right: 0 },
     xAxis: { type: 'category', data: rows.map((row) => row.date.slice(5)), ...axisBase },
     yAxis: [
-      { type: 'value', name: '元', splitLine: { lineStyle: { color: LINE } }, axisLabel: { color: INK_DIM }, nameTextStyle: { color: INK_DIM } },
+      { type: 'value', name: '实收', splitLine: { lineStyle: { color: LINE } }, axisLabel: yuanAxisLabel, nameTextStyle: { color: INK_DIM } },
       { type: 'value', name: '单', splitLine: { show: false }, axisLabel: { color: INK_DIM }, nameTextStyle: { color: INK_DIM } },
     ],
     series: [
       {
-        name: '实收（元）',
+        name: '实收',
         type: 'bar',
         barWidth: 10,
         itemStyle: { color: BRAND, borderRadius: [3, 3, 0, 0] },
-        data: rows.map((row) => row.revenueCent / 100),
+        tooltip: { valueFormatter: yuanValueFormatter },
+        data: rows.map((row) => row.revenueCent),
       },
       {
         name: '单量',
@@ -113,9 +118,9 @@ const channelOption = computed<EChartsOption>(() => {
 function rankOption(rows: Array<{ name: string; valueCent: number }>): EChartsOption {
   const list = [...rows].reverse();
   return {
-    grid: { left: 108, right: 56, top: 12, bottom: 18 },
+    grid: { left: 108, right: 86, top: 12, bottom: 18 },
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    xAxis: { type: 'value', splitLine: { lineStyle: { color: LINE } }, axisLabel: { color: INK_DIM } },
+    xAxis: { type: 'value', splitLine: { lineStyle: { color: LINE } }, axisLabel: yuanAxisLabel },
     yAxis: {
       type: 'category',
       data: list.map((row) => row.name),
@@ -124,7 +129,7 @@ function rankOption(rows: Array<{ name: string; valueCent: number }>): EChartsOp
     },
     series: [
       {
-        name: '实收（元）',
+        name: '实收',
         type: 'bar',
         barWidth: 14,
         itemStyle: { color: BRAND, borderRadius: [0, 3, 3, 0] },
@@ -133,9 +138,10 @@ function rankOption(rows: Array<{ name: string; valueCent: number }>): EChartsOp
           position: 'right',
           color: INK_DIM,
           fontSize: 12,
-          formatter: (params) => Number(params.value).toLocaleString('zh-CN'),
+          formatter: (params) => `¥${fenToYuan(Number(params.value))}`,
         },
-        data: list.map((row) => Math.round(row.valueCent / 100)),
+        // 轴与数据都吃「分」，只在显示时换算成元
+        data: list.map((row) => row.valueCent),
       },
     ],
   };
@@ -154,7 +160,9 @@ const storeOption = computed(() => rankOption(data.value?.storeRank ?? []));
           <p class="kpi__value" :class="item.tone ? `is-${item.tone}` : ''">{{ item.value }}</p>
           <p class="kpi__hint">{{ item.hint }}</p>
         </div>
-        <div v-if="!kpis.length" class="kpi kpi--empty">正在取数…</div>
+        <div v-if="!kpis.length" class="kpi kpi--empty">
+          {{ firstLoad ? '正在取数…' : error || '暂时没取到数据，稍后会自动重试' }}
+        </div>
       </section>
 
       <ScreenPanel class="area-trend" title="近 30 天实收与单量" hint="金额按支付时间归日">

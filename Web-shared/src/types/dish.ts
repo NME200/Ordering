@@ -64,7 +64,8 @@ export interface CreateDishPayload {
   /** 归属门店：不传 = 全商户通用，传了 = 该店专属 */
   storeId?: number;
   name: string;
-  description?: string;
+  /** 描述；传 null 表示清空，不传 = 保持原值（与 imageUrl 同一套语义） */
+  description?: string | null;
   /** 图片地址；传 null 表示清除（不传 = 保持原值，编辑时这两者不是一回事） */
   imageUrl?: string | null;
   /** 售价（分） */

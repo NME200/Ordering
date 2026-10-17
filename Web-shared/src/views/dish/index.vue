@@ -94,14 +94,18 @@ async function loadMerchantOptions(): Promise<void> {
 /** 门店下拉（选店后才能看与改本店例外；范围由服务端按 Token 限定） */
 const storeOptions = ref<Store[]>([]);
 
-async function loadStoreOptions(): Promise<void> {
+async function loadStoreOptions(merchantIdOverride?: number): Promise<void> {
   if (!canReadStores.value) {
     return;
   }
   try {
     // 含已停用门店：停店之后仍要能查它的菜单与例外。
     // 门店绑定角色同样要拉一次 —— 后端会把范围收成他这一家店，用于显示门店名
-    const page = await fetchStores({ page: 1, pageSize: 100, merchantId: query.merchantId });
+    const page = await fetchStores({
+      page: 1,
+      pageSize: 100,
+      merchantId: merchantIdOverride ?? query.merchantId,
+    });
     storeOptions.value = page.list;
   } catch {
     storeOptions.value = [];
@@ -310,7 +314,13 @@ function handleDialogOpened(): void {
 async function handleFormMerchantChange(): Promise<void> {
   form.categoryId = undefined;
   form.specGroupIds = [];
-  await loadFormOptions(isPlatformAdmin.value ? form.merchantId : undefined, form.storeId);
+  // 门店列表是按筛选栏那个商户拉的，换商户后不清掉 storeId 就会把 A 商户的门店
+  // 挂到 B 商户的菜品上，后端必然拒「所选门店不属于当前商户」
+  form.storeId = undefined;
+  await Promise.all([
+    loadStoreOptions(form.merchantId),
+    loadFormOptions(isPlatformAdmin.value ? form.merchantId : undefined, undefined),
+  ]);
 }
 
 /** 换归属门店后重取分类：店专属分类只在该店可选，已选分类可能失效 */
@@ -361,9 +371,9 @@ async function handleSave(): Promise<void> {
   const payload = {
     categoryId: form.categoryId as number,
     name: form.name.trim(),
-    description: form.description.trim() || undefined,
-    // 空值必须发 null：service 按「字段是否出现」决定改不改，
-    // 发 undefined 等于「本次没动它」，界面上点了「清除图片」也不会真的清掉
+    // 可清空的那几个字段一律发 null：service 按「字段是否出现」决定改不改，
+    // 发 undefined 等于「本次没动它」，界面上删空了也清不掉（imageUrl 同）
+    description: form.description.trim() || null,
     imageUrl: form.imageUrl.trim() || null,
     price: yuanToFen(form.priceYuan ?? 0),
     memberPrice:

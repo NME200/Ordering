@@ -349,7 +349,8 @@ export class StatisticsService {
     const today = startOfToday();
     const qb = this.orderItemRepository
       .createQueryBuilder('item')
-      .innerJoin(Order, 'order', 'order.id = item.orderId')
+      // 手写 join 不会自动带软删条件，漏掉就会把已删订单的菜品算进榜
+      .innerJoin(Order, 'order', 'order.id = item.orderId AND order.deleted_at IS NULL')
       .select('item.dishId', 'id')
       .addSelect('item.dishName', 'name')
       .addSelect('SUM(item.quantity)', 'count')
@@ -615,20 +616,33 @@ function labelOf<K extends string | number>(labels: Record<K, string>, key: K): 
   return labels?.[key];
 }
 
-/** 今日 0 点（服务器本地时区，与数据库 session 时区一致） */
+/**
+ * 日界一律按**东八区**算，与进程时区无关。
+ *
+ * 数据库连接串写死 `timezone: '+08:00'`（database.module.ts:33），datetime 列存的是
+ * 东八区墙上时间；而 `new Date(y, m, d)` 取的是**进程本地时区**。容器默认 UTC 时两者差 8 小时，
+ * 表现是「今日实收漏掉凌晨那一截、分时图整体平移」—— 在本机永远复现不出来，一上云就错。
+ * 所以这里显式按 +08 求日历日，再换算回 UTC 瞬时交给 mysql2。
+ */
+const BEIJING_OFFSET_MS = 8 * 3600_000;
+
+/** 今日 0 点（东八区）对应的 UTC 瞬时 */
 function startOfToday(): Date {
   return startOfDay(0);
 }
 
-/** N 天前的 0 点 */
+/** N 天前的 0 点（东八区）对应的 UTC 瞬时 */
 function startOfDay(daysAgo: number): Date {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysAgo);
+  const beijing = new Date(Date.now() + BEIJING_OFFSET_MS);
+  return new Date(
+    Date.UTC(beijing.getUTCFullYear(), beijing.getUTCMonth(), beijing.getUTCDate() - daysAgo) - BEIJING_OFFSET_MS,
+  );
 }
 
-/** 本地日历日，形如 2026-10-14 —— 与 SQL 里 DATE_FORMAT 的取值同一口径 */
+/** 某个瞬时对应的东八区日历日，形如 2026-10-14 —— 与 SQL 里 DATE_FORMAT 的取值同一口径 */
 function dayKey(date: Date): string {
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${date.getFullYear()}-${month}-${day}`;
+  const beijing = new Date(date.getTime() + BEIJING_OFFSET_MS);
+  const month = String(beijing.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(beijing.getUTCDate()).padStart(2, '0');
+  return `${beijing.getUTCFullYear()}-${month}-${day}`;
 }

@@ -199,21 +199,32 @@ export default defineComponent({
      */
     function pickChannel(list: { channel: string }[]): string {
       const wanted = platformPayChannel();
-      return (wanted && list.find((item) => item.channel === wanted)?.channel) || list[0]?.channel || '';
+      if (!wanted) {
+        // H5 预览 / 开发者工具的 web 视图：没有平台渠道可言，退到第一个在线渠道（本地即模拟渠道）
+        return list[0]?.channel ?? '';
+      }
+      // 小程序里只认自己平台那一个渠道；它没挂载时最多退到模拟渠道。
+      // 绝不能退到「别的真实渠道」—— 在支付宝小程序里挑了微信支付去唤起，
+      // 顾客只会看到一句无法自助解决的「微信支付没有拉起」。
+      return (
+        list.find((item) => item.channel === wanted)?.channel ||
+        list.find((item) => item.channel === 'mock')?.channel ||
+        ''
+      );
     }
 
     /** 支付结果由后端回调推进，前端只能轮询确认；查单 10 次/分，所以最多探 6 次 */
-    async function waitPaid(order: PayTarget): Promise<void> {
+    async function waitPaid(order: PayTarget): Promise<boolean> {
       for (let attempt = 0; attempt < 6; attempt += 1) {
         const result = order.payToken
           ? await fetchOrder(order.orderNo, order.payToken).catch(() => null)
           : await fetchCustomerOrder(order.orderId)
               .then((row) => ({ status: row.status }))
               .catch(() => null);
-        if (result && result.status !== Status.PENDING) return;
+        if (result && result.status !== Status.PENDING) return true;
         await new Promise((resolve) => setTimeout(resolve, 900));
       }
-      statusTip.value = '支付结果确认中，稍后可在订单里查看';
+      return false;
     }
 
     async function pay(): Promise<void> {
@@ -221,6 +232,7 @@ export default defineComponent({
       if (!order || paying.value || !chosen.value) return;
       paying.value = true;
       errorText.value = '';
+      statusTip.value = '';
       try {
         const prepay = order.payToken
           ? await createPayment(order.orderId, order.payToken, chosen.value)
@@ -236,8 +248,13 @@ export default defineComponent({
           throw new Error('这个平台的在线收款还没有接入，请让店员在收银台为你收款');
         }
 
-        await waitPaid(order);
-        backToDetail({ orderNo: order.orderNo, id: order.orderId, payToken: order.payToken });
+        // 确认到了才跳详情；没确认就留在本页把话说清楚，
+        // 否则 redirectTo 之后那句「结果确认中」连一帧都看不到，顾客只看到还是待支付
+        if (await waitPaid(order)) {
+          backToDetail({ orderNo: order.orderNo, id: order.orderId, payToken: order.payToken });
+        } else {
+          statusTip.value = '钱应该已经付了，到账还在确认。这一单会留在待支付里几分钟，别重复付款，稍后在订单里看结果';
+        }
       } catch (error) {
         errorText.value = (error as Error).message || '支付没有走通，请重试或让店员收款';
       } finally {

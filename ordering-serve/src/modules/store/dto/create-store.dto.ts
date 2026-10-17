@@ -36,19 +36,19 @@ export class CreateStoreDto {
   @IsOptional()
   @IsString()
   @MaxLength(32, { message: '门店编码最长 32 个字符' })
-  code?: string;
+  code?: string | null;
 
   @ApiPropertyOptional({ description: '门店地址', example: '某某市某某区人民路 1 号', maxLength: 255 })
   @IsOptional()
   @IsString()
   @MaxLength(255, { message: '门店地址最长 255 个字符' })
-  address?: string;
+  address?: string | null;
 
   @ApiPropertyOptional({ description: '门店电话', example: '0571-88888888', maxLength: 20 })
   @IsOptional()
   @IsString()
   @MaxLength(20, { message: '门店电话最长 20 个字符' })
-  phone?: string;
+  phone?: string | null;
 
   @ApiPropertyOptional({
     description: '门店 logo / 头图地址，留空则顾客端用店名首字兜底',

@@ -203,7 +203,24 @@ const rules = computed<FormRules<StoreForm>>(() => ({
   code: [{ max: 32, message: '门店编码最长 32 个字符', trigger: 'blur' }],
   address: [{ max: 255, message: '门店地址最长 255 个字符', trigger: 'blur' }],
   phone: [{ max: 20, message: '门店电话最长 20 个字符', trigger: 'blur' }],
-  logo: [{ max: 255, message: 'logo 地址最长 255 个字符', trigger: 'blur' }],
+  logo: [
+    { max: 255, message: 'logo 地址最长 255 个字符', trigger: 'blur' },
+    {
+      /**
+       * 与菜品图同一把尺：只认 http(s):// 开头。
+       * 后端 CreateStoreDto.logo 只有 @IsString，所以这道闸是唯一的防线 ——
+       * 手填一个 `abc.png` 落库，顾客端就挂成碎图。
+       */
+      validator: (_rule: unknown, value: string, callback: (error?: Error) => void) => {
+        if (!value || /^https?:\/\//i.test(value)) {
+          callback();
+          return;
+        }
+        callback(new Error('图片地址需以 http:// 或 https:// 开头'));
+      },
+      trigger: 'blur',
+    },
+  ],
   businessHours: [{ max: 32, message: '营业时间最长 32 个字符', trigger: 'blur' }],
   latitude: [{ validator: coordinateValidator(90), trigger: 'blur' }],
   longitude: [{ validator: coordinateValidator(180), trigger: 'blur' }],
@@ -264,9 +281,11 @@ async function handleSave(): Promise<void> {
     } else {
       await updateStore(form.id, {
         name: form.name.trim(),
-        code: form.code.trim() || undefined,
-        address: form.address.trim() || undefined,
-        phone: form.phone.trim() || undefined,
+        // 可清空的字段一律发 null：后端按「字段是否出现」决定改不改，
+        // 发 undefined 等于「本次没动它」，界面上删空了也清不掉
+        code: form.code.trim() || null,
+        address: form.address.trim() || null,
+        phone: form.phone.trim() || null,
         logo: form.logo.trim() || null,
         businessHours: form.businessHours.trim() || null,
         latitude: toCoordinate(form.latitude),

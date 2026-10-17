@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import ScreenChart from '@shared/components/screen/ScreenChart.vue';
+import ScreenChart from '@/components/ScreenChart.vue';
 import ScreenPanel from '@shared/components/screen/ScreenPanel.vue';
 import ScreenShell from '@shared/components/screen/ScreenShell.vue';
 import { fetchMerchantScreen } from '@shared/api/statistics';
@@ -14,7 +14,7 @@ import type { EChartsOption } from 'echarts';
  * 门店绑定角色登录时后端会把范围收成他自己那一家店（见 StatisticsService），
  * 所以这块屏不需要「选门店」的控件 —— 挂在哪间店的墙上，就只显示那间店的数。
  */
-const { data, error, updatedAt } = useScreenPolling(fetchMerchantScreen);
+const { data, error, updatedAt, firstLoad } = useScreenPolling(fetchMerchantScreen);
 
 /** 大屏专用色板：深色底上要的是对比度，不是后台那套降饱和的办公色 */
 const INK = '#e8eefb';
@@ -48,24 +48,34 @@ const axisBase = {
   axisLabel: { color: INK_DIM, fontSize: 12 },
 };
 
+/**
+ * 金额轴一律**按分参与计算、按元显示**。
+ *
+ * 中途把分除成元再四舍五入，屏上的排行就会和顶部那张 KPI 卡对不上（差几分钱），
+ * 而这类「差几分」一旦被客户发现，整块屏的可信度就没了。
+ */
+const yuanAxisLabel = { color: INK_DIM, formatter: (value: number) => `¥${fenToYuan(Number(value))}` };
+const yuanValueFormatter = (value: unknown) => `¥${fenToYuan(Number(value))}`;
+
 const trendOption = computed<EChartsOption>(() => {
   const rows = data.value?.trend ?? [];
   return {
     grid: { left: 58, right: 52, top: 34, bottom: 28 },
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    legend: { data: ['实收（元）', '单量'], textStyle: { color: INK_DIM, fontSize: 12 }, top: 0, right: 0 },
+    legend: { data: ['实收', '单量'], textStyle: { color: INK_DIM, fontSize: 12 }, top: 0, right: 0 },
     xAxis: { type: 'category', data: rows.map((row) => row.date.slice(5)), ...axisBase },
     yAxis: [
-      { type: 'value', name: '元', splitLine: { lineStyle: { color: LINE } }, axisLabel: { color: INK_DIM }, nameTextStyle: { color: INK_DIM } },
+      { type: 'value', name: '实收', splitLine: { lineStyle: { color: LINE } }, axisLabel: yuanAxisLabel, nameTextStyle: { color: INK_DIM } },
       { type: 'value', name: '单', splitLine: { show: false }, axisLabel: { color: INK_DIM }, nameTextStyle: { color: INK_DIM } },
     ],
     series: [
       {
-        name: '实收（元）',
+        name: '实收',
         type: 'bar',
         barWidth: 14,
         itemStyle: { color: BRAND, borderRadius: [3, 3, 0, 0] },
-        data: rows.map((row) => row.revenueCent / 100),
+        tooltip: { valueFormatter: yuanValueFormatter },
+        data: rows.map((row) => row.revenueCent),
       },
       {
         name: '单量',
@@ -87,7 +97,7 @@ const hourlyOption = computed<EChartsOption>(() => {
   return {
     grid: { left: 46, right: 56, top: 30, bottom: 28 },
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    legend: { data: ['单量', '实收（元）'], textStyle: { color: INK_DIM, fontSize: 12 }, top: 0, right: 0 },
+    legend: { data: ['单量', '实收'], textStyle: { color: INK_DIM, fontSize: 12 }, top: 0, right: 0 },
     xAxis: {
       type: 'category',
       data: rows.map((row) => String(row.hour).padStart(2, '0')),
@@ -96,7 +106,7 @@ const hourlyOption = computed<EChartsOption>(() => {
     // 单量与实收是两个单位，各占一根轴：堆进同一根柱子会让「下午那根高」说不清是卖得多还是卖得贵
     yAxis: [
       { type: 'value', name: '单', splitLine: { lineStyle: { color: LINE } }, axisLabel: { color: INK_DIM }, nameTextStyle: { color: INK_DIM } },
-      { type: 'value', name: '元', splitLine: { show: false }, axisLabel: { color: INK_DIM }, nameTextStyle: { color: INK_DIM } },
+      { type: 'value', name: '实收', splitLine: { show: false }, axisLabel: yuanAxisLabel, nameTextStyle: { color: INK_DIM } },
     ],
     series: [
       {
@@ -107,7 +117,7 @@ const hourlyOption = computed<EChartsOption>(() => {
         data: rows.map((row) => row.orderCount),
       },
       {
-        name: '实收（元）',
+        name: '实收',
         type: 'line',
         yAxisIndex: 1,
         smooth: true,
@@ -115,7 +125,8 @@ const hourlyOption = computed<EChartsOption>(() => {
         symbolSize: 5,
         lineStyle: { color: BRAND, width: 2 },
         itemStyle: { color: BRAND },
-        data: rows.map((row) => row.revenueCent / 100),
+        tooltip: { valueFormatter: yuanValueFormatter },
+        data: rows.map((row) => row.revenueCent),
       },
     ],
   };
@@ -145,9 +156,13 @@ const diningOption = computed<EChartsOption>(() => {
 function rankOption(rows: Array<{ name: string; valueCent: number; count: number }>, unit: '元' | '份'): EChartsOption {
   const list = [...rows].reverse();
   return {
-    grid: { left: unit === '元' ? 76 : 86, right: 46, top: 12, bottom: 18 },
+    grid: { left: unit === '元' ? 76 : 86, right: 76, top: 12, bottom: 18 },
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    xAxis: { type: 'value', splitLine: { lineStyle: { color: LINE } }, axisLabel: { color: INK_DIM } },
+    xAxis: {
+      type: 'value',
+      splitLine: { lineStyle: { color: LINE } },
+      axisLabel: unit === '元' ? yuanAxisLabel : { color: INK_DIM },
+    },
     yAxis: {
       type: 'category',
       data: list.map((row) => row.name),
@@ -156,7 +171,7 @@ function rankOption(rows: Array<{ name: string; valueCent: number; count: number
     },
     series: [
       {
-        name: unit === '元' ? '实收（元）' : '销量（份）',
+        name: unit === '元' ? '实收' : '销量',
         type: 'bar',
         barWidth: 14,
         itemStyle: { color: unit === '元' ? BRAND : COOL, borderRadius: [0, 3, 3, 0] },
@@ -166,9 +181,10 @@ function rankOption(rows: Array<{ name: string; valueCent: number; count: number
           color: INK_DIM,
           fontSize: 12,
           formatter: (params) =>
-            unit === '元' ? (Number(params.value) / 1).toLocaleString('zh-CN') : String(params.value),
+            unit === '元' ? `¥${fenToYuan(Number(params.value))}` : `${params.value} 份`,
         },
-        data: list.map((row) => (unit === '元' ? Math.round(row.valueCent / 100) : row.count)),
+        // 金额这条轴直接吃「分」，显示时再换算成元，不做中途四舍五入
+        data: list.map((row) => (unit === '元' ? row.valueCent : row.count)),
       },
     ],
   };
@@ -187,7 +203,9 @@ const storeOption = computed(() => rankOption(data.value?.storeRank ?? [], '元'
           <p class="kpi__value" :class="item.tone ? `is-${item.tone}` : ''">{{ item.value }}</p>
           <p class="kpi__hint">{{ item.hint }}</p>
         </div>
-        <div v-if="!kpis.length" class="kpi kpi--empty">正在取数…</div>
+        <div v-if="!kpis.length" class="kpi kpi--empty">
+          {{ firstLoad ? '正在取数…' : error || '暂时没取到数据，稍后会自动重试' }}
+        </div>
       </section>
 
       <ScreenPanel class="area-trend" title="近 14 天实收与单量" hint="金额按支付时间归日">

@@ -37,9 +37,10 @@ export interface CreateStorePayload {
   /** 仅平台管理员可指定 */
   merchantId?: number;
   name: string;
-  code?: string;
-  address?: string;
-  phone?: string;
+  /** 以下四个都是「传 null = 清空，不传 = 保持原值」，编辑时这两者不是一回事 */
+  code?: string | null;
+  address?: string | null;
+  phone?: string | null;
   logo?: string | null;
   businessHours?: string | null;
   /** 留空即不下发：顾客端不显示距离 */

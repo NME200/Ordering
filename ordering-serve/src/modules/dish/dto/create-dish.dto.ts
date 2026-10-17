@@ -55,11 +55,11 @@ export class CreateDishDto {
   @MaxLength(64, { message: '菜品名称最长 64 个字符' })
   name!: string;
 
-  @ApiPropertyOptional({ description: '菜品描述', maxLength: 255 })
+  @ApiPropertyOptional({ description: '菜品描述；传 null = 清空，不传 = 保持原值', maxLength: 255, nullable: true })
   @IsOptional()
   @IsString()
   @MaxLength(255, { message: '菜品描述最长 255 个字符' })
-  description?: string;
+  description?: string | null;
 
   @ApiPropertyOptional({ description: '菜品图片地址', example: 'https://cdn.example.com/dish/1.jpg' })
   @IsOptional()
@@ -74,7 +74,7 @@ export class CreateDishDto {
   @IsUrl({ require_tld: false, protocols: ['http', 'https'] }, {
     message: 'imageUrl 需是以 http(s):// 开头的图片地址',
   })
-  imageUrl?: string;
+  imageUrl?: string | null;
 
   @ApiProperty({ description: '售价（分）', example: 3800, minimum: 0, maximum: PRICE_MAX })
   @Type(() => Number)
@@ -94,7 +94,7 @@ export class CreateDishDto {
   @IsInt({ message: 'memberPrice 必须为整数（单位：分）' })
   @Min(0, { message: 'memberPrice 不能为负' })
   @Max(PRICE_MAX, { message: `memberPrice 不能大于 ${PRICE_MAX}` })
-  memberPrice?: number;
+  memberPrice?: number | null;
 
   @ApiPropertyOptional({ description: '计价单位', example: '份', maxLength: 8, default: '份' })
   @IsOptional()
