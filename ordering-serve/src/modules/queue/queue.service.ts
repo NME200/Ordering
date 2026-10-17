@@ -133,9 +133,14 @@ export class QueueService {
     byTableType: { tableType: string; label: string; waiting: number }[];
   }> {
     const store = await this.storeRepository.findOne({ where: { id: storeId } });
-    if (!store) {
-      throw BusinessException.notFound(ErrorCode.STORE_NOT_FOUND, '门店不存在');
+    // 看板是匿名只读面，但**被平台停用的店不该继续出现在公开页面上**：
+    // 取号走的是 resolveOpenStore（连打烊一起挡），这里只挡「不该被看到」的那几种情况，
+    // 打烊仍允许看（队列本来就是空的，给个错误反而让门口的人以为系统坏了）。
+    // 不存在与已停用一律回同一个 404，不给枚举 storeId 留信号 —— 与小程序活动条同一口径。
+    if (!store || store.status !== CommonStatus.ENABLED) {
+      throw BusinessException.notFound(ErrorCode.ORDER_STORE_CLOSED, '门店不存在或已停止营业');
     }
+    await this.merchantService.assertUsableForRequest(store.merchantId);
     const rows = await this.activeRows(storeId, this.today());
     const calling = rows.find((row) => row.status === QueueStatus.CALLED) ?? null;
 

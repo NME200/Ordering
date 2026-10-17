@@ -18,6 +18,7 @@ import { PaginatedDto } from '../../common/dto/paginated.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Permissions } from '../../common/decorators/permissions.decorator';
 import { Public } from '../../common/decorators/public.decorator';
+import { RateLimit } from '../../common/decorators/rate-limit.decorator';
 import { DevOnlyGuard } from '../../common/guards/dev-only.guard';
 import { AuthUser } from '../../common/interfaces/auth-user.interface';
 import { Permission } from '../../shared/enums/permission.enum';
@@ -49,6 +50,10 @@ export class PaymentController {
   @Public()
   @Post('callback/:channel')
   @HttpCode(HttpStatus.OK)
+  // 这个数看着松，是故意的：全平台一套商户号收款，午高峰几百笔的确认通知
+  // 都从微信侧那少数几个出口 IP 打进来，限太紧会把合法通知挡成 429，
+  // 顾客钱扣了订单还停在待支付 —— 那比被刷一次严重得多。真被刷时它仍然是个上限。
+  @RateLimit({ bucket: 'payment-callback', limit: 3000, windowSeconds: 60 })
   @ApiOperation({
     summary: '支付结果回调（第三方渠道调用）',
     description:

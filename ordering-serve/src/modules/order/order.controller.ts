@@ -15,6 +15,7 @@ import { CurrentCustomer } from '../../common/decorators/current-customer.decora
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Permissions } from '../../common/decorators/permissions.decorator';
 import { Public } from '../../common/decorators/public.decorator';
+import { RateLimit } from '../../common/decorators/rate-limit.decorator';
 import { AuthCustomer } from '../../common/interfaces/auth-customer.interface';
 import { AuthUser } from '../../common/interfaces/auth-user.interface';
 import { Permission } from '../../shared/enums/permission.enum';
@@ -45,6 +46,7 @@ export class OrderController {
 
   @Public()
   @UseGuards(OptionalCustomerGuard)
+  @RateLimit({ bucket: 'public-order-create', limit: 60, windowSeconds: 60 })
   @Post()
   @ApiOperation({
     summary: '创建订单（扫码点餐）',
@@ -114,6 +116,7 @@ export class OrderController {
   }
 
   @Public()
+  @RateLimit({ bucket: 'public-order-pay', limit: 60, windowSeconds: 60 })
   @Post(':id/pay')
   @ApiOperation({
     summary: '发起在线支付（C 端扫码点餐后调用）',

@@ -87,7 +87,16 @@ async function bootstrap(): Promise<void> {
     .addBearerAuth()
     .build();
   const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api/docs', app, document);
+  /**
+   * 接口文档只在非生产环境挂载。
+   *
+   * 它会把全部路由、参数与守卫缺口摊开给任何访问者，而 `dev/mock-pay` 那类
+   * 「生产按接口不存在处理」的路由仍会原样列在里面 —— 等于替人指路。
+   * 判据与 DevOnlyGuard 同源（`app.isProduction`），两处不会各说各话。
+   */
+  if (!configService.getOrThrow<boolean>('app.isProduction')) {
+    SwaggerModule.setup('api/docs', app, document);
+  }
 
   app.enableShutdownHooks();
 

@@ -496,7 +496,12 @@ export const GRANTABLE_PERMISSION_GROUPS: { label: string; options: Permission[]
   },
   {
     label: '账户治理',
-    options: [Permission.USER_READ, Permission.USER_UPDATE],
+    options: [
+      Permission.USER_READ,
+      Permission.USER_UPDATE,
+      // 封禁顾客与封禁商家账号同类：都是账号治理的止血动作，可以切给被授权的运营
+      Permission.CUSTOMER_UPDATE,
+    ],
   },
   {
     label: '业务数据只读排查',
@@ -510,6 +515,11 @@ export const GRANTABLE_PERMISSION_GROUPS: { label: string; options: Permission[]
       // 顾客名册与券的读视图可以切给被授权的运营；改券（coupon:update）仍是平台管理员的动作
       Permission.CUSTOMER_READ,
       Permission.COUPON_READ,
+      // 售后四视图同样只读：受理开票、回复客服、叫号推进都留给经营者自己做
+      Permission.REVIEW_READ,
+      Permission.INVOICE_READ,
+      Permission.SERVICE_READ,
+      Permission.QUEUE_READ,
     ],
   },
 ];
