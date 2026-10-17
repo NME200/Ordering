@@ -65,7 +65,15 @@ export class CreateDishDto {
   @IsOptional()
   @IsString()
   @MaxLength(255, { message: '图片地址最长 255 个字符' })
-  @IsUrl({}, { message: 'imageUrl 需为合法的 URL' })
+  /**
+   * `require_tld: false` 是必须的：图片现在也能由后端自己托管，
+   * 地址形如 `http://localhost:3100/api/v1/uploads/...` 或内网 IP，
+   * 而 validator 默认要求主机名带顶级域，会把这两种都判成「非法 URL」——
+   * 于是「上传成功、保存被拒」。与 app-config / popup 的图片校验同一份选项。
+   */
+  @IsUrl({ require_tld: false, protocols: ['http', 'https'] }, {
+    message: 'imageUrl 需是以 http(s):// 开头的图片地址',
+  })
   imageUrl?: string;
 
   @ApiProperty({ description: '售价（分）', example: 3800, minimum: 0, maximum: PRICE_MAX })

@@ -90,6 +90,17 @@ const PLATFORM_ADMIN_PERMISSIONS: Permission[] = [
   Permission.CUSTOMER_UPDATE,
   Permission.COUPON_READ,
   Permission.COUPON_UPDATE,
+
+  /**
+   * 积分活动（平台补贴发分）。
+   *
+   * 与活动弹窗、装修配置同一判断：它决定全体顾客拿多少分，
+   * 只归平台管理员，**不进可授权白名单**。商户侧的读权限走
+   * `GET /point-activities/effective`，那里按 Token 的商户现算，读不到别家的配置。
+   */
+  Permission.POINT_ACTIVITY_READ,
+  Permission.POINT_ACTIVITY_UPDATE,
+
   Permission.REVIEW_READ,
   Permission.INVOICE_READ,
   Permission.SERVICE_READ,
@@ -138,6 +149,9 @@ const MERCHANT_ADMIN_PERMISSIONS: Permission[] = [
   // 那属于 review / invoice / service 这些履约视图，不等于能封别人的账号。
   Permission.COUPON_READ,
   Permission.COUPON_UPDATE,
+  // 平台积分活动对**只读**：规则与开关都在平台手里，商户要看得见的只是
+  // 「这家店这一段分数是平台补贴的」，否则对账时会被当成自己多发了分。
+  Permission.POINT_ACTIVITY_READ,
   Permission.REVIEW_READ,
   Permission.REVIEW_UPDATE,
   Permission.INVOICE_READ,
@@ -171,6 +185,7 @@ const STORE_MANAGER_PERMISSIONS: Permission[] = [
   Permission.PAYMENT_REFUND,
   // 顾客名册不在门店管理员的视野里：封禁与会员归属都不是门店一级的权限
   Permission.COUPON_READ,
+  Permission.POINT_ACTIVITY_READ,
   Permission.REVIEW_READ,
   Permission.REVIEW_UPDATE,
   Permission.INVOICE_READ,
@@ -240,6 +255,8 @@ export function getPermissionsByRole(role: Role): Permission[] {
  *   商家员工本就由商家自行开通与删除，平台端没有这两个动作。
  * - `store:delete`：删店不可逆且直接抹掉商户的履约主体，留在平台管理员手里；
  *   日常「停店」用可逆的 `store:disable`，不必下放删除。
+ * - `app-config:*` / `popup:*` / `point-activity:*`：界面装修、对全体顾客弹窗、
+ *   给全体顾客发多少分，都是平台级承诺，控制器上另有 `@Roles` 硬锁。
  *
  * 因此白名单 = 商户生命周期 + 账号治理的只读与封禁 + 业务数据只读。
  * **平台端依旧拿不到任何经营类写权限**，授权只是把治理动作切薄一层，

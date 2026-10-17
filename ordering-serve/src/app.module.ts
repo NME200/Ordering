@@ -24,6 +24,7 @@ import { MiniappModule } from './modules/miniapp/miniapp.module';
 import { OrderModule } from './modules/order/order.module';
 import { PaymentConfigModule } from './modules/payment-config/payment-config.module';
 import { PopupModule } from './modules/popup/popup.module';
+import { PointActivityModule } from './modules/point-activity/point-activity.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { PublicModule } from './modules/public/public.module';
 import { QueueModule } from './modules/queue/queue.module';
@@ -31,8 +32,10 @@ import { RedisModule } from './modules/redis/redis.module';
 import { ReviewModule } from './modules/review/review.module';
 import { ServiceModule } from './modules/service/service.module';
 import { SpecGroupModule } from './modules/spec-group/spec-group.module';
+import { StatisticsModule } from './modules/statistics/statistics.module';
 import { StoreModule } from './modules/store/store.module';
 import { StoreDishModule } from './modules/store-dish/store-dish.module';
+import { UploadModule } from './modules/upload/upload.module';
 import { UserModule } from './modules/user/user.module';
 
 /**
@@ -66,6 +69,8 @@ import { UserModule } from './modules/user/user.module';
     PaymentConfigModule,
     PublicModule,
     PopupModule,
+    // 平台积分营销活动：规则只归平台配，发分口径收在 MemberService 一处
+    PointActivityModule,
     AppConfigModule,
     // 顾客域：账号 / 地址 / 会员资产 + 券 / 评价 / 发票 / 客服 / 叫号
     CouponModule,
@@ -77,6 +82,12 @@ import { UserModule } from './modules/user/user.module';
 
     // 小程序配置：凭据 / 扫码规则 / 桌号二维码（与支付配置同级，只归平台管理员）
     MiniappModule,
+
+    // 图片上传（菜品图与门店 logo 的本地上传，静态托管在 /api/v1/uploads/）
+    UploadModule,
+
+    // 数据大屏：只读聚合，一次回满一整块屏
+    StatisticsModule,
   ],
   controllers: [AppController],
   providers: [

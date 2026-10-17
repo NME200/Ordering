@@ -2,6 +2,7 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsDateString, IsEnum, IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { PaginationQueryDto } from '../../../common/dto/pagination-query.dto';
+import { DiningType } from '../../../shared/enums/dining-type.enum';
 import { OrderStatus } from '../../../shared/enums/order-status.enum';
 
 /** 订单列表查询入参（商户端） */
@@ -26,7 +27,16 @@ export class QueryOrderDto extends PaginationQueryDto {
   @IsEnum(OrderStatus, { message: 'status 取值不合法' })
   status?: OrderStatus;
 
-  @ApiPropertyOptional({ description: '按订单号 / 手机号模糊搜索', maxLength: 32 })
+  @ApiPropertyOptional({
+    description: '就餐方式筛选：0 堂食 / 1 自提 / 2 外卖配送',
+    enum: DiningType,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsEnum(DiningType, { message: 'diningType 取值不合法' })
+  diningType?: DiningType;
+
+  @ApiPropertyOptional({ description: '按订单号 / 手机号 / 取餐码模糊搜索', maxLength: 32 })
   @IsOptional()
   @IsString()
   @MaxLength(32)

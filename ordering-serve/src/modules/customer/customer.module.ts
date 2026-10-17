@@ -4,6 +4,7 @@ import { CustomerAuthModule } from './customer-auth.module';
 import { CouponModule } from '../coupon/coupon.module';
 import { CustomerCoupon } from '../coupon/entities/customer-coupon.entity';
 import { MiniappModule } from '../miniapp/miniapp.module';
+import { PointActivityModule } from '../point-activity/point-activity.module';
 import { Order } from '../order/entities/order.entity';
 import { OrderItem } from '../order/entities/order-item.entity';
 import { Payment } from '../payment/entities/payment.entity';
@@ -46,6 +47,8 @@ import { MemberService } from './member.service';
     CouponModule,
     // 微信登录与手机号组件：凭据和接口客户端都在 miniapp 那边
     MiniappModule,
+    // 积分活动的加成口径由 PointActivityService 给（方向是本模块依赖它，不反向）
+    PointActivityModule,
   ],
   controllers: [CustomerController, CustomerAdminController],
   providers: [CustomerService, MemberService, AddressService, CustomerOrderService],

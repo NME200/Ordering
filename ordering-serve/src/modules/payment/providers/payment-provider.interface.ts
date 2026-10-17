@@ -36,6 +36,13 @@ export interface CallbackInput {
 export interface CallbackResult {
   /** 验签是否通过 */
   success: boolean;
+  /**
+   * 报文合法、但这件事与「推进支付单」无关（真实渠道的退款结果通知就是这样）。
+   *
+   * 必须单独确认收到：按验签失败回 4xx 的话，渠道会按退避策略把同一条通知
+   * 重推到一天以上，日志里全是假警报。
+   */
+  ignore?: boolean;
   /** 支付单号 */
   paymentNo: string;
   /** 渠道交易流水号 */

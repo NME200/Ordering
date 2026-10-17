@@ -15,6 +15,7 @@ import { bigintTransformer } from '../../../shared/utils/transformers';
 @Entity('point_logs')
 @Unique('uk_point_order_reason', ['orderId', 'reason'])
 @Index('idx_point_customer_merchant', ['customerId', 'merchantId'])
+@Index('idx_point_activity_customer', ['activityId', 'customerId'])
 export class PointLog extends BaseEntity {
   @Column({ name: 'customer_id', type: 'bigint', transformer: bigintTransformer, comment: '顾客 ID' })
   customerId!: number;
@@ -31,11 +32,30 @@ export class PointLog extends BaseEntity {
   @Column({ name: 'point_after', type: 'int', default: 0, comment: '变动后的积分余额快照' })
   pointAfter!: number;
 
-  @Column({ type: 'varchar', length: 16, comment: '变动原因：order / refund / review / manual' })
+  @Column({
+    type: 'varchar',
+    length: 32,
+    comment: '变动原因：order / refund / review / manual / activity / activity_review / activity_revoke',
+  })
   reason!: PointReason;
 
   @Column({ name: 'order_id', type: 'bigint', transformer: bigintTransformer, nullable: true, comment: '关联订单 ID' })
   orderId!: number | null;
+
+  /**
+   * 关联的积分活动 ID。只有 `activity*` 三类原因才写。
+   *
+   * 刻意**不并进唯一键**：MySQL 唯一索引允许多个 NULL，把 activity_id 加进去
+   * 会让常规的 (orderId, reason) 行失去幂等保护，重复支付回调就能加两次分。
+   */
+  @Column({
+    name: 'activity_id',
+    type: 'bigint',
+    transformer: bigintTransformer,
+    nullable: true,
+    comment: '积分活动 ID（仅 activity* 原因有）',
+  })
+  activityId!: number | null;
 
   @Column({ type: 'varchar', length: 128, nullable: true, comment: '说明文案，直接给顾客看' })
   remark!: string | null;

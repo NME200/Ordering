@@ -9,6 +9,7 @@ import { OrderItem } from '../order/entities/order-item.entity';
 import { Order } from '../order/entities/order.entity';
 import { Payment } from '../payment/entities/payment.entity';
 import { PopupModule } from '../popup/popup.module';
+import { PointActivityModule } from '../point-activity/point-activity.module';
 import { SpecOption } from '../spec-group/entities/spec-option.entity';
 import { SpecGroup } from '../spec-group/entities/spec-group.entity';
 import { Store } from '../store/entities/store.entity';
@@ -40,6 +41,8 @@ import { PublicService } from './public.service';
     MerchantModule,
     AppConfigModule,
     PopupModule,
+    // 活动条只读下发：可用性判定与门店/商户口径都由 PointActivityService 自己走一遍
+    PointActivityModule,
   ],
   controllers: [PublicController],
   providers: [PublicService],

@@ -2,6 +2,7 @@ import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import { join } from 'node:path';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 
@@ -40,6 +41,20 @@ async function bootstrap(): Promise<void> {
   const env = configService.getOrThrow<string>('app.env');
 
   app.setGlobalPrefix(apiPrefix);
+
+  /**
+   * 上传目录的静态托管。
+   *
+   * 挂在 `/${apiPrefix}/uploads/` 下是刻意的：三端后台与小程序走的都是「同源 + /api/ 反代」，
+   * 图片因此不需要新增 nginx location、不需要新的域名白名单，也不会被 CORS 拦。
+   * 关掉目录列表（不给 index），文件名是 UUID，猜不出也列不出别人的图。
+   */
+  const uploadDir = configService.getOrThrow<string>('upload.dir');
+  app.useStaticAssets(join(process.cwd(), uploadDir), {
+    prefix: `/${apiPrefix}/uploads/`,
+    index: false,
+    maxAge: '7d',
+  });
 
   app.useGlobalPipes(
     new ValidationPipe({

@@ -2,6 +2,7 @@ import { PAYMENT_CHANNEL_LABELS, PaymentChannel } from '../../../shared/enums/pa
 import { MockPaymentProvider } from './mock-payment.provider';
 import { OfflinePaymentProvider } from './offline-payment.provider';
 import { PaymentProvider } from './payment-provider.interface';
+import { readWechatSettings, WechatPaymentProvider } from './wechat-payment.provider';
 
 /** 构建结果：明确区分「造出来了」和「为什么不能挂载」，便于日志定位 */
 export type BuildProviderOutcome =
@@ -34,7 +35,22 @@ export function buildProvider(
       return { ok: true, provider: new MockPaymentProvider(secret) };
     }
 
-    case PaymentChannel.WECHAT:
+    case PaymentChannel.WECHAT: {
+      const wechat = readWechatSettings(settings);
+      if (!wechat.ok) {
+        // 点名缺了哪几项：运营对着「配置不完整」四个字是查不出问题的
+        return { ok: false, reason: `${label} 缺少 ${wechat.missing.join('、')}` };
+      }
+      try {
+        return { ok: true, provider: new WechatPaymentProvider(wechat.settings) };
+      } catch (error) {
+        return {
+          ok: false,
+          reason: `${label} 配置不可用：${error instanceof Error ? error.message : String(error)}`,
+        };
+      }
+    }
+
     case PaymentChannel.ALIPAY:
       // 配置已可在界面上维护，但真实签名 / 下单 / 回调验签尚未接入
       return { ok: false, reason: `${label} 配置已保存，渠道实现尚未接入` };

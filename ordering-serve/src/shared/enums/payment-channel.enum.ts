@@ -51,7 +51,7 @@ export const PAYMENT_CHANNEL_META: Record<PaymentChannel, PaymentChannelMeta> = 
   },
   [PaymentChannel.WECHAT]: {
     online: true,
-    implemented: false,
+    implemented: true,
     description:
       '微信支付 V3。需要商户号、AppID、APIv3 密钥、商户 API 证书序列号与商户私钥，验签方式在平台证书与微信支付公钥中二选一。',
   },

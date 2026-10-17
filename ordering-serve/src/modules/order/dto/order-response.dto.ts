@@ -151,6 +151,13 @@ export class OrderResponseDto {
   @ApiProperty({ description: '就餐方式名称', example: '堂食' })
   diningTypeLabel!: string;
 
+  @ApiProperty({
+    description: '收货信息快照（仅外卖单有，下单时按「姓名 电话 详细地址」拼好）。店员按它送',
+    nullable: true,
+    example: '张三 13800001111 浙江省杭州市西湖区文三路 100 号 5 楼',
+  })
+  addressSnapshot!: string | null;
+
   @ApiProperty({ description: '备注', nullable: true })
   remark!: string | null;
 
@@ -213,6 +220,7 @@ export class OrderResponseDto {
     dto.pickupCode = entity.pickupCode;
     dto.diningType = entity.diningType;
     dto.diningTypeLabel = DINING_TYPE_LABELS[entity.diningType];
+    dto.addressSnapshot = entity.addressSnapshot;
     dto.remark = entity.remark;
     dto.paidAt = entity.paidAt;
     dto.acceptedAt = entity.acceptedAt;

@@ -55,12 +55,25 @@ export interface CorsOptions {
   maxAge: number;
 }
 
+export interface UploadOptions {
+  /** 落盘根目录（相对路径按进程工作目录解析，即 ordering-serve/） */
+  dir: string;
+  /**
+   * 拼图片绝对地址用的对外根：生产要填后台实际访问的域名
+   * （如 https://admin.example.com），留空则按请求的 Host 与协议现拼。
+   */
+  publicBase: string;
+  /** 单文件大小上限（字节） */
+  maxBytes: number;
+}
+
 export interface AllConfig {
   app: AppOptions;
   database: DatabaseOptions;
   redis: RedisOptions;
   jwt: JwtOptions;
   cors: CorsOptions;
+  upload: UploadOptions;
 }
 
 export default (): AllConfig => {
@@ -103,6 +116,11 @@ export default (): AllConfig => {
         .filter((origin) => origin.length > 0),
       credentials: process.env.CORS_CREDENTIALS === 'true',
       maxAge: Number(process.env.CORS_MAX_AGE ?? 86400),
+    },
+    upload: {
+      dir: process.env.UPLOAD_DIR ?? 'uploads',
+      publicBase: (process.env.UPLOAD_PUBLIC_BASE ?? '').replace(/\/+$/g, ''),
+      maxBytes: Number(process.env.UPLOAD_MAX_MB ?? 2) * 1024 * 1024,
     },
   };
 };

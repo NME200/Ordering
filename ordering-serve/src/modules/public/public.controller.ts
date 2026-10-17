@@ -4,6 +4,7 @@ import { Public } from '../../common/decorators/public.decorator';
 import { RateLimit } from '../../common/decorators/rate-limit.decorator';
 import { AppConfigService } from '../app-config/app-config.service';
 import { PublicPopupQueue, PopupService } from '../popup/popup.service';
+import { PointActivityService, PublicPointActivityBanner } from '../point-activity/point-activity.service';
 import { QueryPublicPopupDto, ReportPopupEventDto } from '../popup/dto/public-popup.dto';
 import { QueryAppConfigDto } from './dto/query-app-config.dto';
 import { CancelPublicOrderDto } from './dto/cancel-public-order.dto';
@@ -31,6 +32,7 @@ export class PublicController {
     private readonly publicService: PublicService,
     private readonly appConfigService: AppConfigService,
     private readonly popupService: PopupService,
+    private readonly pointActivityService: PointActivityService,
   ) {}
 
   @Get('app-config')
@@ -69,6 +71,22 @@ export class PublicController {
   })
   popupReport(@Body() dto: ReportPopupEventDto): Promise<void> {
     return this.popupService.report(dto);
+  }
+
+  @Get('stores/:storeId/point-activity')
+  @RateLimit({ bucket: 'public-point-activity', limit: 60, windowSeconds: 60 })
+  @ApiOperation({
+    summary: '本店此刻生效的积分活动（无需登录）',
+    description:
+      '与门店菜单同一个形状：租户完全由路径上的 storeId 决定，门店不可用一律 404。' +
+      '只回活动名与文案条，**不回规则参数**：顾客拿多少分一律在服务端算，' +
+      '把百分比下发到小程序只会多一个能被改显示的假口径。' +
+      '没有活动、或活动没配活动条文案时回 null，界面据此整块不渲染。',
+  })
+  pointActivity(
+    @Param('storeId', ParseIntPipe) storeId: number,
+  ): Promise<PublicPointActivityBanner | null> {
+    return this.pointActivityService.publicBanner(storeId);
   }
 
   @Get('stores')

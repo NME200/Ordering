@@ -142,6 +142,10 @@ export enum ErrorCode {
   /** 缺少敏感配置主密钥，或密文无法解密（主密钥被更换过） */
   PAYMENT_CONFIG_KEY_UNAVAILABLE = 90010,
 
+  // ---------- 9xxxx 支付渠道调用 ----------
+  /** 调用真实渠道接口失败（被渠道拒绝、超时或返回体读不懂） */
+  PAYMENT_CHANNEL_ERROR = 90011,
+
   // ---------- 10xxxx 顾客账号 ----------
   /** 顾客账号不存在 */
   CUSTOMER_NOT_FOUND = 100001,
@@ -217,4 +221,27 @@ export enum ErrorCode {
   MINIAPP_CONFIG_INCOMPLETE = 170001,
   /** 微信接口调用失败：把对方的 errcode + errmsg 原样带回，别让运营猜 */
   MINIAPP_WECHAT_API_FAILED = 170002,
+
+  // ---------- 18xxxx 积分活动 ----------
+  /** 积分活动不存在 */
+  POINT_ACTIVITY_NOT_FOUND = 180001,
+  /**
+   * 与已有活动时间窗 + 商户范围重叠。
+   *
+   * 刻意不允许多个活动同时压在同一家商户头上：倍率与满额返怎么叠、上限按谁算，
+   * 每一个仲裁规则都会变成顾客问、店员答不清的那笔账。
+   */
+  POINT_ACTIVITY_OVERLAP = 180002,
+  /** 规则字段与所选类型不符 */
+  POINT_ACTIVITY_RULE_INVALID = 180003,
+  /** 活动已发放过积分，不允许删除（历史流水要能指回活动名） */
+  POINT_ACTIVITY_IN_USE = 180004,
+
+  // ---------- 19xxxx 图片上传 ----------
+  /** 请求里没有找到文件（表单字段名必须是 file） */
+  UPLOAD_FILE_REQUIRED = 190001,
+  /** 不是受支持的图片：MIME 与文件头对不上，或压根不是图片 */
+  UPLOAD_FILE_TYPE_INVALID = 190002,
+  /** 超过单文件大小上限 */
+  UPLOAD_FILE_TOO_LARGE = 190003,
 }

@@ -21,6 +21,7 @@ import {
 import { RefundStatus } from '../../shared/enums/refund-status.enum';
 import { Order } from '../order/entities/order.entity';
 import { CouponService } from '../coupon/coupon.service';
+import { Customer } from '../customer/entities/customer.entity';
 import { MemberService } from '../customer/member.service';
 import { SerialNoGenerator } from '../redis/serial-no.generator';
 import { CreatePaymentDto } from './dto/create-payment.dto';
@@ -59,6 +60,9 @@ export class PaymentService {
     private readonly paymentRepository: Repository<Payment>,
     @InjectRepository(Order)
     private readonly orderRepository: Repository<Order>,
+    /** 只用来取 openid：JSAPI 支付必须有付款人身份，见 resolveOpenId */
+    @InjectRepository(Customer)
+    private readonly customerRepository: Repository<Customer>,
     private readonly dataSource: DataSource,
     private readonly registry: PaymentProviderRegistry,
     private readonly serialNoGenerator: SerialNoGenerator,
@@ -117,10 +121,11 @@ export class PaymentService {
   private async startPayment(
     order: Order,
     channel: PaymentChannel,
-    openId?: string,
+    clientOpenId?: string,
   ): Promise<PrepayResponseDto> {
     const provider = this.registry.get(channel);
     this.assertPayable(order);
+    const openId = await this.resolveOpenId(order, clientOpenId);
 
     let payment = await this.paymentRepository.findOne({
       where: { orderId: order.id, channel, status: PaymentStatus.PENDING },
@@ -180,8 +185,10 @@ export class PaymentService {
    * 处理支付渠道回调（第三方服务器调用，无登录态）。
    *
    * 安全依赖渠道验签；幂等依赖「已成功直接返回」。
+   * 回 null 表示「这条通知是真的、但与推进支付单无关」（如退款结果通知），
+   * 照样回 200 让渠道别再重推。
    */
-  async handleCallback(channel: PaymentChannel, input: CallbackInput): Promise<PaymentResponseDto> {
+  async handleCallback(channel: PaymentChannel, input: CallbackInput): Promise<PaymentResponseDto | null> {
     const provider = this.registry.get(channel);
     const parsed = await provider.verifyAndParseCallback(input);
 
@@ -190,6 +197,10 @@ export class PaymentService {
         ErrorCode.PAYMENT_SIGN_INVALID,
         parsed.message ?? '支付回调验签失败',
       );
+    }
+    if (parsed.ignore) {
+      this.logger.log(`渠道通知已确认收到，不推进支付单：${channel}`);
+      return null;
     }
 
     const payment = await this.paymentRepository.findOne({
@@ -274,7 +285,7 @@ export class PaymentService {
   async simulateOnlinePayment(
     channel: PaymentChannel,
     paymentNo: string,
-  ): Promise<PaymentResponseDto> {
+  ): Promise<PaymentResponseDto | null> {
     const provider = this.registry.get(channel);
     if (!provider.buildCallbackBody) {
       throw BusinessException.badRequest(
@@ -449,6 +460,23 @@ export class PaymentService {
   }
 
   // ==================== 内部辅助 ====================
+
+  /**
+   * JSAPI 支付的 openid：**订单已绑顾客时以库内为准**，前端传什么都不认。
+   *
+   * 填别人的 openid，付款页就会弹到别人手机上（钱也是别人付），
+   * 而这一步没有任何校验能区分「他填了自己的」和「他填了别人的」。
+   * 只有账号还没绑过微信、或本机票据下单（没有账号）时，才用前端给的那一个。
+   */
+  private async resolveOpenId(order: Order, clientOpenId?: string): Promise<string | undefined> {
+    if (order.customerId) {
+      const customer = await this.customerRepository.findOne({ where: { id: order.customerId } });
+      if (customer?.openid) {
+        return customer.openid;
+      }
+    }
+    return clientOpenId;
+  }
 
   /** 校验订单可支付：必须是待支付状态 */
   private assertPayable(order: Order): void {

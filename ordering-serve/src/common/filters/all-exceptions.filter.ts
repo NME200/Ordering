@@ -63,7 +63,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
       };
     }
 
-    // 2. 数据库唯一索引冲突
+    // 2. multer 的上传限制：这些不是「服务器内部错误」，用户需要知道自己该干什么
+    const uploadProblem = this.resolveUploadProblem(exception);
+    if (uploadProblem) {
+      return uploadProblem;
+    }
+
+    // 3. 数据库唯一索引冲突
     if (exception instanceof QueryFailedError) {
       const driverCode = (exception as QueryFailedError & { driverError?: { code?: string } })
         .driverError?.code;
@@ -81,7 +87,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       };
     }
 
-    // 3. NestJS 内置异常（含 ValidationPipe 抛出的参数校验失败）
+    // 4. NestJS 内置异常（含 ValidationPipe 抛出的参数校验失败）
     if (exception instanceof HttpException) {
       const status = exception.getStatus();
       return {
@@ -91,12 +97,59 @@ export class AllExceptionsFilter implements ExceptionFilter {
       };
     }
 
-    // 4. 兜底：未知异常，不暴露细节
+    // 5. 兜底：未知异常，不暴露细节
     return {
       status: HttpStatus.INTERNAL_SERVER_ERROR,
       code: ErrorCode.UNKNOWN,
       message: '服务器内部错误',
     };
+  }
+
+  /**
+   * 把上传被挡下来的几种形态统一成人话。
+   *
+   * 为什么要认三种：`FileInterceptor` 超限时报的不是原始 `MulterError`，
+   * 而是被 platform-express 包过一层的 **413 HttpException**（实测 HTTP 413 + "File too large"）；
+   * 字段名传错时又是 400 + "Unexpected file field"。都不认下来的话，用户会拿到
+   * `code=10000 服务器内部错误` —— 而那恰恰是唯一一条他看了就知道该换张小图的信息。
+   */
+  private resolveUploadProblem(
+    exception: unknown,
+  ): { status: HttpStatus; code: ErrorCode; message: string } | null {
+    const error = exception as {
+      name?: string;
+      code?: string;
+      message?: string;
+      getStatus?: () => number;
+    };
+
+    const message = String(error?.message ?? '');
+    const multerCode = typeof error?.code === 'string' && error.name === 'MulterError' ? error.code : '';
+
+    // 先判「没收到文件」：它和超限同为 multer 错误，别被下面的宽条件吞掉
+    const noFile = multerCode === 'LIMIT_UNEXPECTED_FILE' || /unexpected file field/i.test(message);
+    if (noFile) {
+      return {
+        status: HttpStatus.BAD_REQUEST,
+        code: ErrorCode.UPLOAD_FILE_REQUIRED,
+        message: '没有收到文件：表单字段名必须是 file，且一次只能带一个文件',
+      };
+    }
+
+    const tooLarge =
+      multerCode === 'LIMIT_FILE_SIZE' ||
+      /file too large/i.test(message) ||
+      (exception instanceof HttpException &&
+        exception.getStatus() === HttpStatus.PAYLOAD_TOO_LARGE);
+    if (tooLarge) {
+      return {
+        status: HttpStatus.BAD_REQUEST,
+        code: ErrorCode.UPLOAD_FILE_TOO_LARGE,
+        message: '图片超出大小上限，请先压缩后再上传（长边控制在 2000px 以内就够用了）',
+      };
+    }
+
+    return null;
   }
 
   /** 提取 HttpException 的可读提示，兼容 ValidationPipe 返回字符串数组的情况 */

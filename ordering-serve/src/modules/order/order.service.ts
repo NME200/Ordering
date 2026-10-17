@@ -287,6 +287,9 @@ export class OrderService {
     if (query.status !== undefined) {
       qb.andWhere('order.status = :status', { status: query.status });
     }
+    if (query.diningType !== undefined) {
+      qb.andWhere('order.diningType = :diningType', { diningType: query.diningType });
+    }
     if (query.keyword) {
       // 取餐码必须能搜：顾客在柜台前报的就是它，店员拿它找不到单，这个号就白发了
       qb.andWhere(

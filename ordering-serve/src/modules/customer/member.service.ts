@@ -14,6 +14,11 @@ import { MemberProfile } from './entities/member-profile.entity';
 import { PointLog } from './entities/point-log.entity';
 import { Customer } from './entities/customer.entity';
 import { Order } from '../order/entities/order.entity';
+import { OrderItem } from '../order/entities/order-item.entity';
+import {
+  ActivityBonusRule,
+  PointActivityService,
+} from '../point-activity/point-activity.service';
 
 /** 成长任务定义。写死在代码里：任务与权益是承诺，不在后台随手改 */
 export interface MemberTask {
@@ -48,6 +53,7 @@ export class MemberService {
     @InjectRepository(Customer)
     private readonly customerRepository: Repository<Customer>,
     private readonly dataSource: DataSource,
+    private readonly pointActivityService: PointActivityService,
   ) {}
 
   /** 取会员档案；没有就建一条全零的（首次进这家商户） */
@@ -130,21 +136,33 @@ export class MemberService {
       return;
     }
 
+    /**
+     * 平台积分活动的加成。**与基础分各记一条流水**：
+     * 合在一起就没法回答「这 30 分是平台补贴还是常规消费给的」，
+     * 退款时也只能按当前规则重算，而规则在活动期间是被改过的。
+     */
+    const bonus = await this.grantOrderBonus(order, order.customerId, paid, em);
+
     const pointAfter = await this.upsertDelta(
       em,
       order.customerId,
       order.merchantId,
       {
-        point: gain,
+        point: gain + bonus,
         growth,
         orderCount: 1,
         totalPaid: paid,
         orderAt: order.paidAt ?? new Date(),
       },
     );
-    await em
-      .getRepository(PointLog)
-      .update({ orderId: order.id, reason: PointReason.ORDER }, { pointAfter });
+    /**
+     * 「变动后余额」要回填到这一单的**两条**流水上：基础分与加成是同一次累加落账的，
+     * 只更新 `order` 那一行的话，明细里的加加成行会一直挂着 0 分余额（实测抓到的真缺陷）。
+     */
+    await em.getRepository(PointLog).update(
+      { orderId: order.id, reason: In([PointReason.ORDER, PointReason.ACTIVITY]) },
+      { pointAfter },
+    );
   }
 
   /**
@@ -175,14 +193,26 @@ export class MemberService {
       return;
     }
 
+    /**
+     * 活动加成的回冲按**当初发放时那条流水的原额**，不按当前规则重算：
+     * 活动在订单之后可能被改过倍数、甚至已经下线，历史单的分账不能跟着变。
+     */
+    const revoke = await this.revokeOrderBonus(order);
+
     const pointAfter = await this.upsertDelta(
       this.dataSource.manager,
       order.customerId,
       order.merchantId,
-      { point: -loss, growth: -yuan * GROWTH_PER_YUAN, orderCount: -1, totalPaid: -paid, orderAt: null },
+      {
+        point: -(loss + revoke),
+        growth: -yuan * GROWTH_PER_YUAN,
+        orderCount: -1,
+        totalPaid: -paid,
+        orderAt: null,
+      },
     );
     await this.pointLogRepository.update(
-      { orderId: order.id, reason: PointReason.REFUND },
+      { orderId: order.id, reason: In([PointReason.REFUND, PointReason.ACTIVITY_REVOKE]) },
       { pointAfter },
     );
   }
@@ -193,6 +223,7 @@ export class MemberService {
     merchantId: number,
     orderId: number,
     point: number,
+    diningType: number,
   ): Promise<number> {
     const inserted = await this.tryWriteLog({
       customerId,
@@ -206,18 +237,27 @@ export class MemberService {
     if (!inserted) {
       return 0;
     }
+
+    /**
+     * 评价的活动加成**不受菜品条件约束**（评价是对整单服务的评价），
+     * 但要跟着就餐方式走：配了「仅限堂食」的活动，不该给外卖单的评价送分。
+     */
+    const activity = await this.pointActivityService.effectiveFor(merchantId);
+    const rule = await this.pointActivityService.bonusRuleForReview(activity, diningType);
+    const bonus = rule ? await this.grantReviewBonus(rule, customerId, merchantId, orderId) : 0;
+
     const pointAfter = await this.upsertDelta(this.dataSource.manager, customerId, merchantId, {
-      point,
+      point: point + bonus,
       growth: 0,
       orderCount: 0,
       totalPaid: 0,
       orderAt: null,
     });
     await this.pointLogRepository.update(
-      { orderId, reason: PointReason.REVIEW },
+      { orderId, reason: In([PointReason.REVIEW, PointReason.ACTIVITY_REVIEW]) },
       { pointAfter },
     );
-    return point;
+    return point + bonus;
   }
 
   /** 积分流水（最近 N 条），给会员卡页的「积分明细」用 */
@@ -375,6 +415,119 @@ export class MemberService {
    * 返回 false 表示这次是重复调用（唯一索引命中），调用方必须跳过资产变更 ——
    * 幂等完全依赖数据库，不依赖「先查一次有没有」。
    */
+  /**
+   * 发放本单的平台活动加成。
+   *
+   * @returns 实际入账的加成分；0 表示没有活动、没配加成，或这个人本期已经拿满
+   */
+  private async grantOrderBonus(
+    order: Order,
+    customerId: number,
+    paid: number,
+    em: EntityManager,
+  ): Promise<number> {
+    /**
+     * 先问「这家商户此刻有没有活动」，没有就一次明细都不读 ——
+     * 这段跑在支付回调的事务里，不能为了一个多数时候不存在的功能多打一次库。
+     */
+    const activity = await this.pointActivityService.effectiveFor(order.merchantId);
+    if (!activity) {
+      return 0;
+    }
+    const items = await em.getRepository(OrderItem).find({
+      where: { orderId: order.id },
+      select: { dishId: true, subtotal: true },
+    });
+    const rule = await this.pointActivityService.bonusRuleForOrder(activity, {
+      paidCent: paid,
+      diningType: order.diningType,
+      items,
+    });
+    if (!rule || rule.orderBonus <= 0) {
+      return 0;
+    }
+    const bonus = await this.withinCap(rule, customerId, rule.orderBonus);
+    if (bonus <= 0) {
+      return 0;
+    }
+    const inserted = await this.tryWriteLog(
+      {
+        customerId,
+        merchantId: order.merchantId,
+        pointChange: bonus,
+        growthChange: 0,
+        reason: PointReason.ACTIVITY,
+        orderId: order.id,
+        activityId: rule.activityId,
+        remark: `${rule.activityName}活动加成`,
+      },
+      em,
+    );
+    return inserted ? bonus : 0;
+  }
+
+  /** 评价的活动加成。与下单加成各占一个 reason，唯一键才不会互相撞 */
+  private async grantReviewBonus(
+    rule: ActivityBonusRule,
+    customerId: number,
+    merchantId: number,
+    orderId: number,
+  ): Promise<number> {
+    if (rule.reviewBonus <= 0) {
+      return 0;
+    }
+    const bonus = await this.withinCap(rule, customerId, rule.reviewBonus);
+    if (bonus <= 0) {
+      return 0;
+    }
+    const inserted = await this.tryWriteLog({
+      customerId,
+      merchantId,
+      pointChange: bonus,
+      growthChange: 0,
+      reason: PointReason.ACTIVITY_REVIEW,
+      orderId,
+      activityId: rule.activityId,
+      remark: `${rule.activityName}评价加成`,
+    });
+    return inserted ? bonus : 0;
+  }
+
+  /** 退款时把这一单发出去的活动加成按原额扣回 */
+  private async revokeOrderBonus(order: Order): Promise<number> {
+    const granted = await this.pointLogRepository.findOne({
+      where: { orderId: order.id, reason: PointReason.ACTIVITY },
+    });
+    if (!granted || granted.pointChange <= 0 || granted.activityId === null) {
+      return 0;
+    }
+    const inserted = await this.tryWriteLog({
+      customerId: granted.customerId,
+      merchantId: granted.merchantId,
+      pointChange: -granted.pointChange,
+      growthChange: 0,
+      reason: PointReason.ACTIVITY_REVOKE,
+      orderId: order.id,
+      activityId: granted.activityId,
+      remark: `订单 ${order.orderNo} 退款，活动加成同步扣回`,
+    });
+    return inserted ? granted.pointChange : 0;
+  }
+
+  /**
+   * 每人上限截断。
+   *
+   * 上限按「同一个人在这一个活动上净拿到多少分」算，跨商户合计 ——
+   * 活动是平台配的，限额防的是刷这个人能薅走的总量，按商户各算一遍等于没限。
+   */
+  private async withinCap(rule: ActivityBonusRule, customerId: number, want: number): Promise<number> {
+    if (rule.perCustomerCap <= 0) {
+      return want;
+    }
+    const granted = await this.pointActivityService.grantedForCustomer(rule.activityId, customerId);
+    return Math.max(0, Math.min(want, rule.perCustomerCap - granted));
+  }
+
   private async tryWriteLog(
     input: {
       customerId: number;
@@ -384,6 +537,7 @@ export class MemberService {
       reason: PointReason;
       orderId: number;
       remark: string;
+      activityId?: number | null;
     },
     manager?: EntityManager,
   ): Promise<boolean> {

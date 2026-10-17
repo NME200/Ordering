@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { DevOnlyGuard } from '../../common/guards/dev-only.guard';
 import { CouponModule } from '../coupon/coupon.module';
 import { CustomerModule } from '../customer/customer.module';
+import { Customer } from '../customer/entities/customer.entity';
 import { PaymentConfig } from '../payment-config/entities/payment-config.entity';
 import { Order } from '../order/entities/order.entity';
 import { Payment } from './entities/payment.entity';
@@ -25,7 +26,7 @@ import { PaymentProviderRegistry } from './providers/payment-provider.registry';
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Payment, Order, PaymentConfig]),
+    TypeOrmModule.forFeature([Payment, Order, PaymentConfig, Customer]),
     CustomerModule,
     CouponModule,
   ],

@@ -59,7 +59,7 @@ export class PaymentController {
     @Param('channel') channel: string,
     @Body() body: Record<string, unknown>,
     @Req() request: RawBodyRequest<Request>,
-  ): Promise<PaymentResponseDto> {
+  ): Promise<PaymentResponseDto | null> {
     // 真实渠道（如微信支付）验签必须用原始请求体，这里优先取 rawBody
     const rawBody = request.rawBody ? request.rawBody.toString('utf8') : JSON.stringify(body);
 
@@ -85,7 +85,7 @@ export class PaymentController {
     summary: '模拟渠道支付成功（仅非生产环境）',
     description: '在服务端生成合法回调报文并走完整验签链路，行为与真实渠道回调一致。',
   })
-  mockPay(@Body() dto: SimulatePaymentDto): Promise<PaymentResponseDto> {
+  mockPay(@Body() dto: SimulatePaymentDto): Promise<PaymentResponseDto | null> {
     return this.paymentService.simulateOnlinePayment(
       dto.channel ?? PaymentChannel.MOCK,
       dto.paymentNo,

@@ -126,4 +126,9 @@ export enum Permission {
   MINIAPP_READ = 'miniapp:read',
   /** 小程序配置：修改凭据与扫码规则、生成桌号二维码 */
   MINIAPP_UPDATE = 'miniapp:update',
+
+  /** 积分活动：查看规则与发放统计（商户侧只能看本店参与中的，读的是生效结果不是配置权） */
+  POINT_ACTIVITY_READ = 'point-activity:read',
+  /** 积分活动：新建 / 修改 / 启停 / 删除（平台管理员独占，不进可授权白名单） */
+  POINT_ACTIVITY_UPDATE = 'point-activity:update',
 }

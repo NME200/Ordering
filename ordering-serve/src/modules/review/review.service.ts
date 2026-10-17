@@ -71,7 +71,13 @@ export class ReviewService {
     // 赠分失败不能把评价本身回滚掉：评价已经落库，顾客不该看到「提交失败」
     let awarded = 0;
     try {
-      awarded = await this.memberService.awardReviewPoint(customerId, order.merchantId, order.id, REVIEW_POINT);
+      awarded = await this.memberService.awardReviewPoint(
+        customerId,
+        order.merchantId,
+        order.id,
+        REVIEW_POINT,
+        order.diningType,
+      );
       if (awarded > 0) {
         review.pointAwarded = awarded;
         await this.reviewRepository.save(review);

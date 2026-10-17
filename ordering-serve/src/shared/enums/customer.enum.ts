@@ -64,6 +64,10 @@ export function nextMemberLevel(level: number): MemberLevel | null {
  *
  * 流水表用 `reason + orderId` 做幂等：支付回调可能重复到达，
  * 没有唯一约束的话一笔订单能加两次积分。
+ *
+ * `activity*` 三个值是**平台积分活动的加成分**，与常规分分开各记一条：
+ * 合在一条里就没法回答「这轮平台补贴了多少分」，退款时也只会按当前规则重算，
+ * 而规则在活动期间被改过的话历史单就对不上账了。
  */
 export enum PointReason {
   /** 下单实付赠送 */
@@ -74,6 +78,12 @@ export enum PointReason {
   REVIEW = 'review',
   /** 运营手动调整 */
   MANUAL = 'manual',
+  /** 积分活动：下单实付的加成部分 */
+  ACTIVITY = 'activity',
+  /** 积分活动：评价赠送的加成部分 */
+  ACTIVITY_REVIEW = 'activity_review',
+  /** 积分活动：退款时按当初发放的原额扣回 */
+  ACTIVITY_REVOKE = 'activity_revoke',
 }
 
 export const POINT_REASON_LABELS: Record<PointReason, string> = {
@@ -81,6 +91,9 @@ export const POINT_REASON_LABELS: Record<PointReason, string> = {
   [PointReason.REFUND]: '退款扣回',
   [PointReason.REVIEW]: '评价赠送',
   [PointReason.MANUAL]: '人工调整',
+  [PointReason.ACTIVITY]: '活动加成',
+  [PointReason.ACTIVITY_REVIEW]: '活动加成',
+  [PointReason.ACTIVITY_REVOKE]: '活动扣回',
 };
 
 /** 每实付 1 元累计的成长值与积分（同比例，便于对顾客解释「1 元 = 1 分」） */
